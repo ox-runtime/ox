@@ -1,11 +1,34 @@
 #pragma once
 
-// Runtime information
-#define RUNTIME_NAME "ox"
-#define RUNTIME_VERSION XR_MAKE_VERSION(1, 0, 0)
+// Platform headers must be included before OpenXR headers
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <unknwn.h>
+#include <windows.h>
+#else
+// Linux requires X11 and GLX headers
+#include <GL/glx.h>
+#include <X11/Xlib.h>
+#endif
+
+// Define graphics API before including OpenXR
+#define XR_USE_GRAPHICS_API_OPENGL
 
 // Include necessary headers
 #include <openxr/openxr.h>
+#include <openxr/openxr_loader_negotiation.h>
+#include <openxr/openxr_platform.h>
+
+#include <string>
+#include <unordered_map>
+
+// Forward declarations for loader negotiation types
+struct XrNegotiateLoaderInfo;
+struct XrNegotiateRuntimeRequest;
+
+// Runtime information
+#define RUNTIME_NAME "ox"
+#define RUNTIME_VERSION XR_MAKE_VERSION(1, 0, 0)
 
 // Export macro for Windows DLL
 #ifdef _WIN32
