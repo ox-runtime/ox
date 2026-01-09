@@ -15,10 +15,11 @@ def main():
     print("Testing ox runtime...")
     print()
 
-    # Set up environment - manifest is in build/bin/
-    manifest_path = project_root / "build" / "bin" / "ox_openxr.json"
-    env = os.environ.copy()
-    env["XR_RUNTIME_JSON"] = str(manifest_path)
+    # Check environment
+    if "XR_RUNTIME_JSON" not in os.environ:
+        print("❌ XR_RUNTIME_JSON environment variable is not set.")
+        print("Please run this script from the project root directory.")
+        return 1
 
     # Find Python executable in venv
     venv_python = project_root / ".venv" / "Scripts" / "python.exe"
@@ -38,12 +39,11 @@ def main():
         return 1
 
     # Run the test
-    print(f"Using runtime: {manifest_path}")
+    print(f"Using runtime: {os.environ.get('XR_RUNTIME_JSON')}")
     print(f"Running: {test_script}")
     print("-" * 60)
 
-    result = subprocess.run([str(venv_python), str(test_script)], env=env, capture_output=False)
-
+    result = subprocess.run([str(venv_python), str(test_script)], capture_output=False)
     print("-" * 60)
 
     if result.returncode == 0:
