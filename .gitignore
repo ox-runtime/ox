@@ -1,6 +1,6 @@
 # Python virtual environment and examples
 pyopenxr_examples/
-.venv/
+.venv*/
 __pycache__/
 *.py[cod]
 *$py.class
