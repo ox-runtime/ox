@@ -17,6 +17,7 @@ endif()
 # Build as shared library (runtime)
 add_library(ox SHARED
     src/runtime.cpp
+    src/logging.cpp
 )
 
 target_include_directories(ox PRIVATE
