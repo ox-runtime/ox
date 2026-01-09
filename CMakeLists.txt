@@ -4,6 +4,16 @@ project(ox VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Set default build type if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+# Ensure NDEBUG is defined for Release builds
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    add_compile_definitions(NDEBUG)
+endif()
+
 # Use OpenXR SDK from git submodule
 set(OPENXR_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/OpenXR-SDK)
 
