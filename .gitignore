@@ -1,0 +1,49 @@
+# Python virtual environment and examples
+pyopenxr_examples/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build directories
+build/
+cmake-build-*/
+minimal_runtime/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+*.dll
+*.so
+*.dylib
+*.exe
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.o
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
