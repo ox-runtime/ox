@@ -32,7 +32,7 @@ void Log(LogLevel level, const char* message) {
             level_str = "DEBUG";
             break;
         case LogLevel::INFO:
-            level_str = "INFO ";
+            level_str = "INFO";
             break;
         case LogLevel::LOG_ERROR:
             level_str = "ERROR";
