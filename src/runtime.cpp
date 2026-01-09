@@ -21,6 +21,7 @@
 #include <unordered_map>
 
 #include "logging.h"
+#include "runtime.h"
 
 // Export macro for Windows DLL
 #ifdef _WIN32
@@ -28,10 +29,6 @@
 #else
 #define RUNTIME_EXPORT __attribute__((visibility("default")))
 #endif
-
-// Runtime information
-#define RUNTIME_NAME "ox"
-#define RUNTIME_VERSION XR_MAKE_VERSION(1, 0, 0)
 
 // Instance handle management
 static std::unordered_map<XrInstance, bool> g_instances;
@@ -48,13 +45,13 @@ T createHandle() {
 }
 
 // Function to get the function pointer for OpenXR API functions
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const char* name,
-                                                                PFN_xrVoidFunction* function);
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const char* name,
+                                                     PFN_xrVoidFunction* function);
 
 // xrEnumerateApiLayerProperties
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateApiLayerProperties(uint32_t propertyCapacityInput,
-                                                                        uint32_t* propertyCountOutput,
-                                                                        XrApiLayerProperties* properties) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateApiLayerProperties(uint32_t propertyCapacityInput,
+                                                             uint32_t* propertyCountOutput,
+                                                             XrApiLayerProperties* properties) {
     LOG_DEBUG("xrEnumerateApiLayerProperties called");
     // No API layers in this minimal runtime
     if (propertyCountOutput) {
@@ -64,10 +61,10 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateApiLayerProperties(uint32_t
 }
 
 // xrEnumerateInstanceExtensionProperties
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties(const char* layerName,
-                                                                                 uint32_t propertyCapacityInput,
-                                                                                 uint32_t* propertyCountOutput,
-                                                                                 XrExtensionProperties* properties) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties(const char* layerName,
+                                                                      uint32_t propertyCapacityInput,
+                                                                      uint32_t* propertyCountOutput,
+                                                                      XrExtensionProperties* properties) {
     LOG_DEBUG("xrEnumerateInstanceExtensionProperties called");
     const char* extensions[] = {"XR_KHR_opengl_enable"};
     const uint32_t extensionCount = sizeof(extensions) / sizeof(extensions[0]);
@@ -98,8 +95,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties
 }
 
 // xrCreateInstance
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreateInfo* createInfo,
-                                                           XrInstance* instance) {
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreateInfo* createInfo, XrInstance* instance) {
     LOG_DEBUG("xrCreateInstance called");
     if (!createInfo || !instance) {
         LOG_ERROR("xrCreateInstance: Invalid parameters");
@@ -122,7 +118,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreat
 }
 
 // xrDestroyInstance
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroyInstance(XrInstance instance) {
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyInstance(XrInstance instance) {
     LOG_DEBUG("xrDestroyInstance called");
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     auto it = g_instances.find(instance);
@@ -137,8 +133,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroyInstance(XrInstance instance)
 }
 
 // xrGetInstanceProperties
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProperties(XrInstance instance,
-                                                                  XrInstanceProperties* instanceProperties) {
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProperties(XrInstance instance, XrInstanceProperties* instanceProperties) {
     LOG_DEBUG("xrGetInstanceProperties called");
     if (!instanceProperties) {
         LOG_ERROR("xrGetInstanceProperties: Null instanceProperties");
@@ -172,7 +167,7 @@ static bool g_sessionReadySent = false;
 static bool g_sessionFocusedSent = false;
 
 // xrPollEvent - returns session state change events
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffer* eventData) {
+XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffer* eventData) {
     LOG_DEBUG("xrPollEvent called");
     if (!eventData) {
         LOG_ERROR("xrPollEvent: Null eventData");
@@ -225,37 +220,16 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEve
 }
 
 // xrResultToString
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrResultToString(XrInstance instance, XrResult value,
-                                                           char buffer[XR_MAX_RESULT_STRING_SIZE]) {
+XRAPI_ATTR XrResult XRAPI_CALL xrResultToString(XrInstance instance, XrResult value,
+                                                char buffer[XR_MAX_RESULT_STRING_SIZE]) {
     LOG_DEBUG("xrResultToString called");
     if (!buffer) {
         LOG_ERROR("xrResultToString: Null buffer");
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    const char* resultStr = "XR_UNKNOWN";
-    switch (value) {
-        case XR_SUCCESS:
-            resultStr = "XR_SUCCESS";
-            break;
-        case XR_ERROR_VALIDATION_FAILURE:
-            resultStr = "XR_ERROR_VALIDATION_FAILURE";
-            break;
-        case XR_ERROR_HANDLE_INVALID:
-            resultStr = "XR_ERROR_HANDLE_INVALID";
-            break;
-        case XR_ERROR_INSTANCE_LOST:
-            resultStr = "XR_ERROR_INSTANCE_LOST";
-            break;
-        case XR_ERROR_RUNTIME_FAILURE:
-            resultStr = "XR_ERROR_RUNTIME_FAILURE";
-            break;
-        case XR_EVENT_UNAVAILABLE:
-            resultStr = "XR_EVENT_UNAVAILABLE";
-            break;
-        default:
-            break;
-    }
+    auto it = g_resultStrings.find(value);
+    const char* resultStr = (it != g_resultStrings.end()) ? it->second : "XR_UNKNOWN";
 
     strncpy(buffer, resultStr, XR_MAX_RESULT_STRING_SIZE - 1);
     buffer[XR_MAX_RESULT_STRING_SIZE - 1] = '\0';
@@ -264,25 +238,16 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrResultToString(XrInstance instance, 
 }
 
 // xrStructureTypeToString
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrStructureTypeToString(XrInstance instance, XrStructureType value,
-                                                                  char buffer[XR_MAX_STRUCTURE_NAME_SIZE]) {
+XRAPI_ATTR XrResult XRAPI_CALL xrStructureTypeToString(XrInstance instance, XrStructureType value,
+                                                       char buffer[XR_MAX_STRUCTURE_NAME_SIZE]) {
     LOG_DEBUG("xrStructureTypeToString called");
     if (!buffer) {
         LOG_ERROR("xrStructureTypeToString: Null buffer");
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    const char* typeStr = "XR_TYPE_UNKNOWN";
-    switch (value) {
-        case XR_TYPE_INSTANCE_CREATE_INFO:
-            typeStr = "XR_TYPE_INSTANCE_CREATE_INFO";
-            break;
-        case XR_TYPE_INSTANCE_PROPERTIES:
-            typeStr = "XR_TYPE_INSTANCE_PROPERTIES";
-            break;
-        default:
-            break;
-    }
+    auto it = g_structureTypeStrings.find(value);
+    const char* typeStr = (it != g_structureTypeStrings.end()) ? it->second : "XR_TYPE_UNKNOWN";
 
     strncpy(buffer, typeStr, XR_MAX_STRUCTURE_NAME_SIZE - 1);
     buffer[XR_MAX_STRUCTURE_NAME_SIZE - 1] = '\0';
@@ -291,8 +256,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrStructureTypeToString(XrInstance ins
 }
 
 // xrGetSystem
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetSystem(XrInstance instance, const XrSystemGetInfo* getInfo,
-                                                      XrSystemId* systemId) {
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSystem(XrInstance instance, const XrSystemGetInfo* getInfo, XrSystemId* systemId) {
     LOG_DEBUG("xrGetSystem called");
     if (!getInfo || !systemId) {
         LOG_ERROR("xrGetSystem: Invalid parameters");
@@ -311,8 +275,8 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetSystem(XrInstance instance, const
 }
 
 // xrGetSystemProperties
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetSystemProperties(XrInstance instance, XrSystemId systemId,
-                                                                XrSystemProperties* properties) {
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSystemProperties(XrInstance instance, XrSystemId systemId,
+                                                     XrSystemProperties* properties) {
     LOG_DEBUG("xrGetSystemProperties called");
     if (!properties || systemId != 1) {
         LOG_ERROR("xrGetSystemProperties: Invalid parameters");
@@ -333,9 +297,10 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetSystemProperties(XrInstance insta
 }
 
 // xrEnumerateViewConfigurations
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurations(
-    XrInstance instance, XrSystemId systemId, uint32_t viewConfigurationTypeCapacityInput,
-    uint32_t* viewConfigurationTypeCountOutput, XrViewConfigurationType* viewConfigurationTypes) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurations(XrInstance instance, XrSystemId systemId,
+                                                             uint32_t viewConfigurationTypeCapacityInput,
+                                                             uint32_t* viewConfigurationTypeCountOutput,
+                                                             XrViewConfigurationType* viewConfigurationTypes) {
     LOG_DEBUG("xrEnumerateViewConfigurations called");
     if (!viewConfigurationTypeCountOutput) {
         LOG_ERROR("xrEnumerateViewConfigurations: Null output parameter");
@@ -356,9 +321,10 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurations(
 }
 
 // xrEnumerateViewConfigurationViews
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurationViews(
-    XrInstance instance, XrSystemId systemId, XrViewConfigurationType viewConfigurationType, uint32_t viewCapacityInput,
-    uint32_t* viewCountOutput, XrViewConfigurationView* views) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurationViews(XrInstance instance, XrSystemId systemId,
+                                                                 XrViewConfigurationType viewConfigurationType,
+                                                                 uint32_t viewCapacityInput, uint32_t* viewCountOutput,
+                                                                 XrViewConfigurationView* views) {
     LOG_DEBUG("xrEnumerateViewConfigurationViews called");
     if (!viewCountOutput) {
         LOG_ERROR("xrEnumerateViewConfigurationViews: Null output parameter");
@@ -388,10 +354,11 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurationViews(
 }
 
 // xrEnumerateEnvironmentBlendModes
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateEnvironmentBlendModes(
-    XrInstance instance, XrSystemId systemId, XrViewConfigurationType viewConfigurationType,
-    uint32_t environmentBlendModeCapacityInput, uint32_t* environmentBlendModeCountOutput,
-    XrEnvironmentBlendMode* environmentBlendModes) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateEnvironmentBlendModes(XrInstance instance, XrSystemId systemId,
+                                                                XrViewConfigurationType viewConfigurationType,
+                                                                uint32_t environmentBlendModeCapacityInput,
+                                                                uint32_t* environmentBlendModeCountOutput,
+                                                                XrEnvironmentBlendMode* environmentBlendModes) {
     LOG_DEBUG("xrEnumerateEnvironmentBlendModes called");
     if (!environmentBlendModeCountOutput) {
         LOG_ERROR("xrEnumerateEnvironmentBlendModes: Null output parameter");
@@ -412,8 +379,8 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateEnvironmentBlendModes(
 }
 
 // xrCreateSession
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSessionCreateInfo* createInfo,
-                                                          XrSession* session) {
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSessionCreateInfo* createInfo,
+                                               XrSession* session) {
     LOG_DEBUG("xrCreateSession called");
     if (!createInfo || !session) {
         LOG_ERROR("xrCreateSession: Invalid parameters");
@@ -435,7 +402,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, c
 }
 
 // xrDestroySession
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroySession(XrSession session) {
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySession(XrSession session) {
     LOG_DEBUG("xrDestroySession called");
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     auto it = g_sessions.find(session);
@@ -450,7 +417,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroySession(XrSession session) {
 }
 
 // xrBeginSession
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrBeginSession(XrSession session, const XrSessionBeginInfo* beginInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrBeginSession(XrSession session, const XrSessionBeginInfo* beginInfo) {
     LOG_DEBUG("xrBeginSession called");
     if (!beginInfo) {
         LOG_ERROR("xrBeginSession: Null beginInfo");
@@ -467,7 +434,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrBeginSession(XrSession session, cons
 }
 
 // xrEndSession
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEndSession(XrSession session) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEndSession(XrSession session) {
     LOG_DEBUG("xrEndSession called");
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     if (g_sessions.find(session) == g_sessions.end()) {
@@ -479,9 +446,8 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEndSession(XrSession session) {
 }
 
 // xrCreateReferenceSpace
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session,
-                                                                 const XrReferenceSpaceCreateInfo* createInfo,
-                                                                 XrSpace* space) {
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session, const XrReferenceSpaceCreateInfo* createInfo,
+                                                      XrSpace* space) {
     LOG_DEBUG("xrCreateReferenceSpace called");
     if (!createInfo || !space) {
         LOG_ERROR("xrCreateReferenceSpace: Invalid parameters");
@@ -502,7 +468,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession sessi
 }
 
 // xrDestroySpace
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpace(XrSpace space) {
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpace(XrSpace space) {
     LOG_DEBUG("xrDestroySpace called");
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     auto it = g_spaces.find(space);
@@ -516,8 +482,8 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpace(XrSpace space) {
 }
 
 // xrWaitFrame
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitInfo* frameWaitInfo,
-                                                      XrFrameState* frameState) {
+XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitInfo* frameWaitInfo,
+                                           XrFrameState* frameState) {
     LOG_DEBUG("xrWaitFrame called");
     if (!frameState) {
         LOG_ERROR("xrWaitFrame: Null frameState");
@@ -540,7 +506,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const X
 }
 
 // xrBeginFrame
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const XrFrameBeginInfo* frameBeginInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const XrFrameBeginInfo* frameBeginInfo) {
     LOG_DEBUG("xrBeginFrame called");
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     if (g_sessions.find(session) == g_sessions.end()) {
@@ -552,7 +518,7 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const 
 }
 
 // xrEndFrame
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInfo* frameEndInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInfo* frameEndInfo) {
     LOG_DEBUG("xrEndFrame called");
     if (!frameEndInfo) {
         LOG_ERROR("xrEndFrame: Null frameEndInfo");
@@ -569,9 +535,9 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const Xr
 }
 
 // xrLocateViews - Returns incrementing position values per frame
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLocateInfo* viewLocateInfo,
-                                                        XrViewState* viewState, uint32_t viewCapacityInput,
-                                                        uint32_t* viewCountOutput, XrView* views) {
+XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLocateInfo* viewLocateInfo,
+                                             XrViewState* viewState, uint32_t viewCapacityInput,
+                                             uint32_t* viewCountOutput, XrView* views) {
     LOG_DEBUG("xrLocateViews called");
     if (!viewLocateInfo || !viewState || !viewCountOutput) {
         LOG_ERROR("xrLocateViews: Invalid parameters");
@@ -628,9 +594,8 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const
 }
 
 // xrCreateActionSet
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance,
-                                                            const XrActionSetCreateInfo* createInfo,
-                                                            XrActionSet* actionSet) {
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance, const XrActionSetCreateInfo* createInfo,
+                                                 XrActionSet* actionSet) {
     LOG_DEBUG("xrCreateActionSet called");
     if (!createInfo || !actionSet) {
         LOG_ERROR("xrCreateActionSet: Invalid parameters");
@@ -641,14 +606,14 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance,
 }
 
 // xrDestroyActionSet
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroyActionSet(XrActionSet actionSet) {
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyActionSet(XrActionSet actionSet) {
     LOG_DEBUG("xrDestroyActionSet called");
     return XR_SUCCESS;
 }
 
 // xrCreateAction
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrActionCreateInfo* createInfo,
-                                                         XrAction* action) {
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrActionCreateInfo* createInfo,
+                                              XrAction* action) {
     LOG_DEBUG("xrCreateAction called");
     if (!createInfo || !action) {
         LOG_ERROR("xrCreateAction: Invalid parameters");
@@ -659,34 +624,34 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, 
 }
 
 // xrDestroyAction
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroyAction(XrAction action) {
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyAction(XrAction action) {
     LOG_DEBUG("xrDestroyAction called");
     return XR_SUCCESS;
 }
 
 // xrSuggestInteractionProfileBindings
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
+XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
     XrInstance instance, const XrInteractionProfileSuggestedBinding* suggestedBindings) {
     LOG_DEBUG("xrSuggestInteractionProfileBindings called");
     return XR_SUCCESS;
 }
 
 // xrAttachSessionActionSets
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrAttachSessionActionSets(XrSession session,
-                                                                    const XrSessionActionSetsAttachInfo* attachInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrAttachSessionActionSets(XrSession session,
+                                                         const XrSessionActionSetsAttachInfo* attachInfo) {
     LOG_DEBUG("xrAttachSessionActionSets called");
     return XR_SUCCESS;
 }
 
 // xrSyncActions
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrSyncActions(XrSession session, const XrActionsSyncInfo* syncInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrSyncActions(XrSession session, const XrActionsSyncInfo* syncInfo) {
     LOG_DEBUG("xrSyncActions called");
     return XR_SUCCESS;
 }
 
 // xrEnumerateSwapchainFormats
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, uint32_t formatCapacityInput,
-                                                                      uint32_t* formatCountOutput, int64_t* formats) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, uint32_t formatCapacityInput,
+                                                           uint32_t* formatCountOutput, int64_t* formats) {
     LOG_DEBUG("xrEnumerateSwapchainFormats called");
     const int64_t supportedFormats[] = {
         0x1908,  // GL_RGBA
@@ -709,8 +674,8 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession 
 }
 
 // xrCreateSwapchain
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo* createInfo,
-                                                            XrSwapchain* swapchain) {
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo* createInfo,
+                                                 XrSwapchain* swapchain) {
     LOG_DEBUG("xrCreateSwapchain called");
     if (!swapchain) {
         LOG_ERROR("xrCreateSwapchain: Null swapchain pointer");
@@ -721,15 +686,15 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, c
 }
 
 // xrDestroySwapchain
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
     LOG_DEBUG("xrDestroySwapchain called");
     return XR_SUCCESS;
 }
 
 // xrEnumerateSwapchainImages
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain, uint32_t imageCapacityInput,
-                                                                     uint32_t* imageCountOutput,
-                                                                     XrSwapchainImageBaseHeader* images) {
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain, uint32_t imageCapacityInput,
+                                                          uint32_t* imageCountOutput,
+                                                          XrSwapchainImageBaseHeader* images) {
     LOG_DEBUG("xrEnumerateSwapchainImages called");
     const uint32_t numImages = 3;  // Typical triple-buffering
 
@@ -750,9 +715,9 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain
 }
 
 // xrAcquireSwapchainImage
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrAcquireSwapchainImage(XrSwapchain swapchain,
-                                                                  const XrSwapchainImageAcquireInfo* acquireInfo,
-                                                                  uint32_t* index) {
+XRAPI_ATTR XrResult XRAPI_CALL xrAcquireSwapchainImage(XrSwapchain swapchain,
+                                                       const XrSwapchainImageAcquireInfo* acquireInfo,
+                                                       uint32_t* index) {
     LOG_DEBUG("xrAcquireSwapchainImage called");
     if (index) {
         *index = 0;  // Always return the first image
@@ -761,21 +726,20 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrAcquireSwapchainImage(XrSwapchain sw
 }
 
 // xrWaitSwapchainImage
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrWaitSwapchainImage(XrSwapchain swapchain,
-                                                               const XrSwapchainImageWaitInfo* waitInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrWaitSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageWaitInfo* waitInfo) {
     LOG_DEBUG("xrWaitSwapchainImage called");
     return XR_SUCCESS;
 }
 
 // xrReleaseSwapchainImage
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrReleaseSwapchainImage(XrSwapchain swapchain,
-                                                                  const XrSwapchainImageReleaseInfo* releaseInfo) {
+XRAPI_ATTR XrResult XRAPI_CALL xrReleaseSwapchainImage(XrSwapchain swapchain,
+                                                       const XrSwapchainImageReleaseInfo* releaseInfo) {
     LOG_DEBUG("xrReleaseSwapchainImage called");
     return XR_SUCCESS;
 }
 
 // xrGetOpenGLGraphicsRequirementsKHR
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
+XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
     XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsOpenGLKHR* graphicsRequirements) {
     LOG_DEBUG("xrGetOpenGLGraphicsRequirementsKHR called");
     if (!graphicsRequirements) {
@@ -788,100 +752,21 @@ extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
 }
 
 // xrGetInstanceProcAddr - the main function dispatch table
-// xrGetInstanceProcAddr - the main function dispatch table
-extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const char* name,
-                                                                PFN_xrVoidFunction* function) {
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const char* name,
+                                                     PFN_xrVoidFunction* function) {
     LOG_DEBUG("xrGetInstanceProcAddr called");
     if (!name || !function) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    // Map function names to function pointers
-    if (strcmp(name, "xrGetInstanceProcAddr") == 0) {
-        *function = (PFN_xrVoidFunction)xrGetInstanceProcAddr;
-    } else if (strcmp(name, "xrEnumerateApiLayerProperties") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateApiLayerProperties;
-    } else if (strcmp(name, "xrEnumerateInstanceExtensionProperties") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateInstanceExtensionProperties;
-    } else if (strcmp(name, "xrCreateInstance") == 0) {
-        *function = (PFN_xrVoidFunction)xrCreateInstance;
-    } else if (strcmp(name, "xrDestroyInstance") == 0) {
-        *function = (PFN_xrVoidFunction)xrDestroyInstance;
-    } else if (strcmp(name, "xrGetInstanceProperties") == 0) {
-        *function = (PFN_xrVoidFunction)xrGetInstanceProperties;
-    } else if (strcmp(name, "xrPollEvent") == 0) {
-        *function = (PFN_xrVoidFunction)xrPollEvent;
-    } else if (strcmp(name, "xrResultToString") == 0) {
-        *function = (PFN_xrVoidFunction)xrResultToString;
-    } else if (strcmp(name, "xrStructureTypeToString") == 0) {
-        *function = (PFN_xrVoidFunction)xrStructureTypeToString;
-    } else if (strcmp(name, "xrGetSystem") == 0) {
-        *function = (PFN_xrVoidFunction)xrGetSystem;
-    } else if (strcmp(name, "xrGetSystemProperties") == 0) {
-        *function = (PFN_xrVoidFunction)xrGetSystemProperties;
-    } else if (strcmp(name, "xrEnumerateViewConfigurations") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateViewConfigurations;
-    } else if (strcmp(name, "xrEnumerateViewConfigurationViews") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateViewConfigurationViews;
-    } else if (strcmp(name, "xrCreateSession") == 0) {
-        *function = (PFN_xrVoidFunction)xrCreateSession;
-    } else if (strcmp(name, "xrDestroySession") == 0) {
-        *function = (PFN_xrVoidFunction)xrDestroySession;
-    } else if (strcmp(name, "xrBeginSession") == 0) {
-        *function = (PFN_xrVoidFunction)xrBeginSession;
-    } else if (strcmp(name, "xrEndSession") == 0) {
-        *function = (PFN_xrVoidFunction)xrEndSession;
-    } else if (strcmp(name, "xrCreateReferenceSpace") == 0) {
-        *function = (PFN_xrVoidFunction)xrCreateReferenceSpace;
-    } else if (strcmp(name, "xrDestroySpace") == 0) {
-        *function = (PFN_xrVoidFunction)xrDestroySpace;
-    } else if (strcmp(name, "xrWaitFrame") == 0) {
-        *function = (PFN_xrVoidFunction)xrWaitFrame;
-    } else if (strcmp(name, "xrBeginFrame") == 0) {
-        *function = (PFN_xrVoidFunction)xrBeginFrame;
-    } else if (strcmp(name, "xrEndFrame") == 0) {
-        *function = (PFN_xrVoidFunction)xrEndFrame;
-    } else if (strcmp(name, "xrLocateViews") == 0) {
-        *function = (PFN_xrVoidFunction)xrLocateViews;
-    } else if (strcmp(name, "xrEnumerateEnvironmentBlendModes") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateEnvironmentBlendModes;
-    } else if (strcmp(name, "xrGetOpenGLGraphicsRequirementsKHR") == 0) {
-        *function = (PFN_xrVoidFunction)xrGetOpenGLGraphicsRequirementsKHR;
-    } else if (strcmp(name, "xrCreateActionSet") == 0) {
-        *function = (PFN_xrVoidFunction)xrCreateActionSet;
-    } else if (strcmp(name, "xrDestroyActionSet") == 0) {
-        *function = (PFN_xrVoidFunction)xrDestroyActionSet;
-    } else if (strcmp(name, "xrCreateAction") == 0) {
-        *function = (PFN_xrVoidFunction)xrCreateAction;
-    } else if (strcmp(name, "xrDestroyAction") == 0) {
-        *function = (PFN_xrVoidFunction)xrDestroyAction;
-    } else if (strcmp(name, "xrSuggestInteractionProfileBindings") == 0) {
-        *function = (PFN_xrVoidFunction)xrSuggestInteractionProfileBindings;
-    } else if (strcmp(name, "xrAttachSessionActionSets") == 0) {
-        *function = (PFN_xrVoidFunction)xrAttachSessionActionSets;
-    } else if (strcmp(name, "xrSyncActions") == 0) {
-        *function = (PFN_xrVoidFunction)xrSyncActions;
-    } else if (strcmp(name, "xrEnumerateSwapchainFormats") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateSwapchainFormats;
-    } else if (strcmp(name, "xrCreateSwapchain") == 0) {
-        *function = (PFN_xrVoidFunction)xrCreateSwapchain;
-    } else if (strcmp(name, "xrDestroySwapchain") == 0) {
-        *function = (PFN_xrVoidFunction)xrDestroySwapchain;
-    } else if (strcmp(name, "xrEnumerateSwapchainImages") == 0) {
-        *function = (PFN_xrVoidFunction)xrEnumerateSwapchainImages;
-    } else if (strcmp(name, "xrAcquireSwapchainImage") == 0) {
-        *function = (PFN_xrVoidFunction)xrAcquireSwapchainImage;
-    } else if (strcmp(name, "xrWaitSwapchainImage") == 0) {
-        *function = (PFN_xrVoidFunction)xrWaitSwapchainImage;
-    } else if (strcmp(name, "xrReleaseSwapchainImage") == 0) {
-        *function = (PFN_xrVoidFunction)xrReleaseSwapchainImage;
+    auto it = g_functionMap.find(name);
+    if (it != g_functionMap.end()) {
+        *function = it->second;
+        return XR_SUCCESS;
     } else {
-        // Function not supported
         *function = nullptr;
         return XR_ERROR_FUNCTION_UNSUPPORTED;
     }
-
-    return XR_SUCCESS;
 }
 
 // Negotiation function required by OpenXR loader
@@ -911,4 +796,3 @@ xrNegotiateLoaderRuntimeInterface(const XrNegotiateLoaderInfo* loaderInfo, XrNeg
 
     return XR_SUCCESS;
 }
-
