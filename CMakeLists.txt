@@ -26,18 +26,7 @@ endif()
 
 # Build as shared library (runtime)
 add_library(ox SHARED
-    src/common.cpp
-    src/instance.cpp
-    src/system.cpp
-    src/session.cpp
-    src/space.cpp
-    src/frame.cpp
-    src/swapchain.cpp
-    src/action.cpp
-    src/string.cpp
-    src/graphics.cpp
-    src/event.cpp
-    src/loader.cpp
+    src/runtime.cpp
     src/logging.cpp
 )
 
