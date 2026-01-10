@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(ox VERSION 1.0.0 LANGUAGES CXX)
 
+include(FetchContent)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -14,15 +16,16 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebI
     add_compile_definitions(NDEBUG)
 endif()
 
-# Use OpenXR SDK from git submodule
-set(OPENXR_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/OpenXR-SDK)
+# Fetch OpenXR SDK
+FetchContent_Declare(
+    openxr
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+    GIT_TAG release-1.1.54
+)
+FetchContent_MakeAvailable(openxr)
 
-if(EXISTS ${OPENXR_SDK_DIR}/include/openxr/openxr.h)
-    set(OPENXR_INCLUDE_DIR ${OPENXR_SDK_DIR}/include)
-    message(STATUS "Using OpenXR SDK from submodule: ${OPENXR_SDK_DIR}")
-else()
-    message(FATAL_ERROR "OpenXR SDK not found at ${OPENXR_SDK_DIR}. Please initialize the submodule with: git submodule update --init")
-endif()
+set(OPENXR_INCLUDE_DIR ${openxr_SOURCE_DIR}/include)
+message(STATUS "Using OpenXR SDK from FetchContent: ${openxr_SOURCE_DIR}")
 
 # Platform-specific link libraries
 if(WIN32)
