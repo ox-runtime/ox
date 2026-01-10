@@ -24,16 +24,45 @@ else()
     message(FATAL_ERROR "OpenXR SDK not found at ${OPENXR_SDK_DIR}. Please initialize the submodule with: git submodule update --init")
 endif()
 
-# Build as shared library (runtime)
+# Platform-specific link libraries
+if(WIN32)
+    set(PLATFORM_LIBS)
+else()
+    set(PLATFORM_LIBS pthread rt)
+endif()
+
+# Service executable
+add_executable(ox-service
+    src/service/main.cpp
+    src/logging.cpp
+)
+
+target_include_directories(ox-service PRIVATE
+    ${OPENXR_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(ox-service PRIVATE ${PLATFORM_LIBS})
+
+set_target_properties(ox-service PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
+)
+
+# Client library (runtime DLL)
 add_library(ox SHARED
-    src/runtime.cpp
+    src/client/runtime.cpp
+    src/client/service_connection.cpp
     src/logging.cpp
 )
 
 target_include_directories(ox PRIVATE
     ${OPENXR_INCLUDE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+
+target_link_libraries(ox PRIVATE ${PLATFORM_LIBS})
 
 # Set output directory to build/bin (disable per-config subdirectories)
 set_target_properties(ox PROPERTIES
@@ -49,7 +78,6 @@ set_target_properties(ox PROPERTIES
 if(WIN32)
     target_compile_definitions(ox PRIVATE
         XR_USE_PLATFORM_WIN32
-        _CRT_SECURE_NO_WARNINGS
     )
     # Export symbols for Windows DLL
     target_compile_definitions(ox PRIVATE
@@ -78,8 +106,8 @@ configure_file(
     @ONLY
 )
 
-# Install the runtime library
-install(TARGETS ox
+# Install the runtime library and service
+install(TARGETS ox ox-service
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
@@ -91,6 +119,7 @@ add_custom_command(TARGET ox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "Build complete!"
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "Runtime library: ${CMAKE_BINARY_DIR}/bin/${RUNTIME_LIBRARY_NAME}"
+    COMMAND ${CMAKE_COMMAND} -E echo "Service executable:     ${CMAKE_BINARY_DIR}/bin/ox-service${CMAKE_EXECUTABLE_SUFFIX}"
     COMMAND ${CMAKE_COMMAND} -E echo "Manifest file:   ${MANIFEST_OUTPUT}"
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "To use this runtime, set:"

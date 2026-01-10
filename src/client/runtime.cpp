@@ -1,0 +1,993 @@
+// Include platform headers before OpenXR
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX  // Prevent Windows.h from defining min/max macros
+#include <unknwn.h>
+#include <windows.h>
+#else
+#include <GL/glx.h>
+#include <X11/Xlib.h>
+#endif
+
+#define XR_USE_GRAPHICS_API_OPENGL
+#include <openxr/openxr.h>
+#include <openxr/openxr_loader_negotiation.h>
+#include <openxr/openxr_platform.h>
+
+#include <algorithm>
+#include <cstring>
+#include <iostream>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
+#include "../logging.h"
+#include "service_connection.h"
+
+// Runtime information
+#define RUNTIME_NAME "ox"
+#define RUNTIME_VERSION XR_MAKE_VERSION(1, 0, 0)
+
+using namespace ox::client;
+using namespace ox::protocol;
+
+// Export macro for Windows DLL
+#ifdef _WIN32
+#define RUNTIME_EXPORT __declspec(dllexport)
+#else
+#define RUNTIME_EXPORT __attribute__((visibility("default")))
+#endif
+
+// Instance handle management
+static std::unordered_map<XrInstance, bool> g_instances;
+static std::unordered_map<XrSession, XrInstance> g_sessions;
+static std::unordered_map<XrSpace, XrSession> g_spaces;
+static std::mutex g_instance_mutex;
+static uint64_t g_next_handle = 1;
+
+// Helper to generate unique handles
+template <typename T>
+T createHandle() {
+    return (T)(uintptr_t)(g_next_handle++);
+}
+
+// Safe string copy helper - modern C++17+ replacement for strncpy
+inline void safe_copy_string(char* dest, size_t dest_size, std::string_view src) {
+    if (dest_size == 0) return;
+    const size_t copy_len = std::min(src.size(), dest_size - 1);
+    std::copy_n(src.data(), copy_len, dest);
+    dest[copy_len] = '\0';
+}
+
+// Forward declare all functions
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const char* name,
+                                                     PFN_xrVoidFunction* function);
+
+// Function map for xrGetInstanceProcAddr
+static std::unordered_map<std::string, PFN_xrVoidFunction> g_clientFunctionMap;
+
+static void InitializeFunctionMap();
+
+// xrEnumerateApiLayerProperties
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateApiLayerProperties(uint32_t propertyCapacityInput,
+                                                             uint32_t* propertyCountOutput,
+                                                             XrApiLayerProperties* properties) {
+    LOG_DEBUG("xrEnumerateApiLayerProperties called");
+    if (propertyCountOutput) {
+        *propertyCountOutput = 0;
+    }
+    return XR_SUCCESS;
+}
+
+// xrEnumerateInstanceExtensionProperties
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties(const char* layerName,
+                                                                      uint32_t propertyCapacityInput,
+                                                                      uint32_t* propertyCountOutput,
+                                                                      XrExtensionProperties* properties) {
+    LOG_DEBUG("xrEnumerateInstanceExtensionProperties called");
+    const char* extensions[] = {"XR_KHR_opengl_enable"};
+    const uint32_t extensionCount = sizeof(extensions) / sizeof(extensions[0]);
+
+    if (propertyCountOutput) {
+        *propertyCountOutput = extensionCount;
+    }
+
+    if (propertyCapacityInput == 0) {
+        return XR_SUCCESS;
+    }
+
+    if (!properties) {
+        LOG_ERROR("xrEnumerateInstanceExtensionProperties: Null properties");
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    uint32_t count = propertyCapacityInput < extensionCount ? propertyCapacityInput : extensionCount;
+    for (uint32_t i = 0; i < count; i++) {
+        properties[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+        properties[i].next = nullptr;
+        properties[i].extensionVersion = 1;
+        safe_copy_string(properties[i].extensionName, XR_MAX_EXTENSION_NAME_SIZE, extensions[i]);
+    }
+
+    return XR_SUCCESS;
+}
+
+// xrCreateInstance
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreateInfo* createInfo, XrInstance* instance) {
+    LOG_DEBUG("xrCreateInstance called");
+    if (!createInfo || !instance) {
+        LOG_ERROR("xrCreateInstance: Invalid parameters");
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    // Initialize function map
+    if (g_clientFunctionMap.empty()) {
+        InitializeFunctionMap();
+    }
+
+    // Connect to service
+    if (!ServiceConnection::Instance().Connect()) {
+        LOG_ERROR("Failed to connect to service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+
+    // Create instance handle
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    XrInstance newInstance = createHandle<XrInstance>();
+    g_instances[newInstance] = true;
+    *instance = newInstance;
+
+    LOG_INFO("OpenXR instance created successfully");
+    return XR_SUCCESS;
+}
+
+// xrDestroyInstance
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyInstance(XrInstance instance) {
+    LOG_DEBUG("xrDestroyInstance called");
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    auto it = g_instances.find(instance);
+    if (it == g_instances.end()) {
+        LOG_ERROR("xrDestroyInstance: Invalid instance handle");
+        return XR_ERROR_HANDLE_INVALID;
+    }
+
+    g_instances.erase(it);
+
+    // Disconnect from service if no more instances
+    if (g_instances.empty()) {
+        ServiceConnection::Instance().Disconnect();
+    }
+
+    LOG_INFO("OpenXR instance destroyed");
+    return XR_SUCCESS;
+}
+
+// xrGetInstanceProperties
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProperties(XrInstance instance, XrInstanceProperties* instanceProperties) {
+    LOG_DEBUG("xrGetInstanceProperties called");
+    if (!instanceProperties) {
+        LOG_ERROR("xrGetInstanceProperties: Null instanceProperties");
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    if (g_instances.find(instance) == g_instances.end()) {
+        LOG_ERROR("xrGetInstanceProperties: Invalid instance handle");
+        return XR_ERROR_HANDLE_INVALID;
+    }
+
+    instanceProperties->runtimeVersion = RUNTIME_VERSION;
+    safe_copy_string(instanceProperties->runtimeName, XR_MAX_RUNTIME_NAME_SIZE, RUNTIME_NAME);
+
+    return XR_SUCCESS;
+}
+
+// xrPollEvent - returns session state change events
+XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffer* eventData) {
+    LOG_DEBUG("xrPollEvent called");
+    if (!eventData) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    static bool readySent = false;
+    static bool synchronizedSent = false;
+    static bool focusedSent = false;
+
+    if (!readySent) {
+        XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
+        stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
+        stateEvent->next = nullptr;
+        stateEvent->session = (XrSession)1;
+        stateEvent->state = XR_SESSION_STATE_READY;
+        stateEvent->time = 0;
+        readySent = true;
+        LOG_INFO("Session state: READY");
+        return XR_SUCCESS;
+    }
+
+    if (!synchronizedSent) {
+        XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
+        stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
+        stateEvent->next = nullptr;
+        stateEvent->session = (XrSession)1;
+        stateEvent->state = XR_SESSION_STATE_SYNCHRONIZED;
+        stateEvent->time = 0;
+        synchronizedSent = true;
+        LOG_INFO("Session state: SYNCHRONIZED");
+        return XR_SUCCESS;
+    }
+
+    if (!focusedSent) {
+        XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
+        stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
+        stateEvent->next = nullptr;
+        stateEvent->session = (XrSession)1;
+        stateEvent->state = XR_SESSION_STATE_FOCUSED;
+        stateEvent->time = 0;
+        focusedSent = true;
+        LOG_INFO("Session state: FOCUSED");
+        return XR_SUCCESS;
+    }
+
+    return XR_EVENT_UNAVAILABLE;
+}
+
+// String conversion maps
+static const std::unordered_map<XrResult, const char*> g_resultStrings = {
+    {XR_SUCCESS, "XR_SUCCESS"},
+    {XR_TIMEOUT_EXPIRED, "XR_TIMEOUT_EXPIRED"},
+    {XR_SESSION_LOSS_PENDING, "XR_SESSION_LOSS_PENDING"},
+    {XR_EVENT_UNAVAILABLE, "XR_EVENT_UNAVAILABLE"},
+    {XR_SPACE_BOUNDS_UNAVAILABLE, "XR_SPACE_BOUNDS_UNAVAILABLE"},
+    {XR_SESSION_NOT_FOCUSED, "XR_SESSION_NOT_FOCUSED"},
+    {XR_FRAME_DISCARDED, "XR_FRAME_DISCARDED"},
+    {XR_ERROR_VALIDATION_FAILURE, "XR_ERROR_VALIDATION_FAILURE"},
+    {XR_ERROR_RUNTIME_FAILURE, "XR_ERROR_RUNTIME_FAILURE"},
+    {XR_ERROR_OUT_OF_MEMORY, "XR_ERROR_OUT_OF_MEMORY"},
+    {XR_ERROR_API_VERSION_UNSUPPORTED, "XR_ERROR_API_VERSION_UNSUPPORTED"},
+    {XR_ERROR_INITIALIZATION_FAILED, "XR_ERROR_INITIALIZATION_FAILED"},
+    {XR_ERROR_FUNCTION_UNSUPPORTED, "XR_ERROR_FUNCTION_UNSUPPORTED"},
+    {XR_ERROR_FEATURE_UNSUPPORTED, "XR_ERROR_FEATURE_UNSUPPORTED"},
+    {XR_ERROR_EXTENSION_NOT_PRESENT, "XR_ERROR_EXTENSION_NOT_PRESENT"},
+    {XR_ERROR_LIMIT_REACHED, "XR_ERROR_LIMIT_REACHED"},
+    {XR_ERROR_SIZE_INSUFFICIENT, "XR_ERROR_SIZE_INSUFFICIENT"},
+    {XR_ERROR_HANDLE_INVALID, "XR_ERROR_HANDLE_INVALID"},
+    {XR_ERROR_INSTANCE_LOST, "XR_ERROR_INSTANCE_LOST"},
+    {XR_ERROR_SESSION_RUNNING, "XR_ERROR_SESSION_RUNNING"},
+    {XR_ERROR_SESSION_NOT_RUNNING, "XR_ERROR_SESSION_NOT_RUNNING"},
+    {XR_ERROR_SESSION_LOST, "XR_ERROR_SESSION_LOST"},
+    {XR_ERROR_SYSTEM_INVALID, "XR_ERROR_SYSTEM_INVALID"},
+    {XR_ERROR_PATH_INVALID, "XR_ERROR_PATH_INVALID"},
+    {XR_ERROR_PATH_COUNT_EXCEEDED, "XR_ERROR_PATH_COUNT_EXCEEDED"},
+    {XR_ERROR_PATH_FORMAT_INVALID, "XR_ERROR_PATH_FORMAT_INVALID"},
+    {XR_ERROR_PATH_UNSUPPORTED, "XR_ERROR_PATH_UNSUPPORTED"},
+    {XR_ERROR_LAYER_INVALID, "XR_ERROR_LAYER_INVALID"},
+    {XR_ERROR_LAYER_LIMIT_EXCEEDED, "XR_ERROR_LAYER_LIMIT_EXCEEDED"},
+    {XR_ERROR_SWAPCHAIN_RECT_INVALID, "XR_ERROR_SWAPCHAIN_RECT_INVALID"},
+    {XR_ERROR_SWAPCHAIN_FORMAT_UNSUPPORTED, "XR_ERROR_SWAPCHAIN_FORMAT_UNSUPPORTED"},
+    {XR_ERROR_ACTION_TYPE_MISMATCH, "XR_ERROR_ACTION_TYPE_MISMATCH"},
+    {XR_ERROR_SESSION_NOT_READY, "XR_ERROR_SESSION_NOT_READY"},
+    {XR_ERROR_SESSION_NOT_STOPPING, "XR_ERROR_SESSION_NOT_STOPPING"},
+    {XR_ERROR_TIME_INVALID, "XR_ERROR_TIME_INVALID"},
+    {XR_ERROR_REFERENCE_SPACE_UNSUPPORTED, "XR_ERROR_REFERENCE_SPACE_UNSUPPORTED"},
+    {XR_ERROR_FILE_ACCESS_ERROR, "XR_ERROR_FILE_ACCESS_ERROR"},
+    {XR_ERROR_FILE_CONTENTS_INVALID, "XR_ERROR_FILE_CONTENTS_INVALID"},
+    {XR_ERROR_FORM_FACTOR_UNSUPPORTED, "XR_ERROR_FORM_FACTOR_UNSUPPORTED"},
+    {XR_ERROR_FORM_FACTOR_UNAVAILABLE, "XR_ERROR_FORM_FACTOR_UNAVAILABLE"},
+    {XR_ERROR_API_LAYER_NOT_PRESENT, "XR_ERROR_API_LAYER_NOT_PRESENT"},
+    {XR_ERROR_CALL_ORDER_INVALID, "XR_ERROR_CALL_ORDER_INVALID"},
+    {XR_ERROR_GRAPHICS_DEVICE_INVALID, "XR_ERROR_GRAPHICS_DEVICE_INVALID"},
+    {XR_ERROR_POSE_INVALID, "XR_ERROR_POSE_INVALID"},
+    {XR_ERROR_INDEX_OUT_OF_RANGE, "XR_ERROR_INDEX_OUT_OF_RANGE"},
+    {XR_ERROR_VIEW_CONFIGURATION_TYPE_UNSUPPORTED, "XR_ERROR_VIEW_CONFIGURATION_TYPE_UNSUPPORTED"},
+    {XR_ERROR_ENVIRONMENT_BLEND_MODE_UNSUPPORTED, "XR_ERROR_ENVIRONMENT_BLEND_MODE_UNSUPPORTED"},
+    {XR_ERROR_NAME_DUPLICATED, "XR_ERROR_NAME_DUPLICATED"},
+    {XR_ERROR_NAME_INVALID, "XR_ERROR_NAME_INVALID"},
+    {XR_ERROR_ACTIONSET_NOT_ATTACHED, "XR_ERROR_ACTIONSET_NOT_ATTACHED"},
+    {XR_ERROR_ACTIONSETS_ALREADY_ATTACHED, "XR_ERROR_ACTIONSETS_ALREADY_ATTACHED"},
+    {XR_ERROR_LOCALIZED_NAME_DUPLICATED, "XR_ERROR_LOCALIZED_NAME_DUPLICATED"},
+    {XR_ERROR_LOCALIZED_NAME_INVALID, "XR_ERROR_LOCALIZED_NAME_INVALID"},
+    {XR_ERROR_GRAPHICS_REQUIREMENTS_CALL_MISSING, "XR_ERROR_GRAPHICS_REQUIREMENTS_CALL_MISSING"},
+};
+
+static const std::unordered_map<XrStructureType, const char*> g_structureTypeStrings = {
+    {XR_TYPE_UNKNOWN, "XR_TYPE_UNKNOWN"},
+    {XR_TYPE_API_LAYER_PROPERTIES, "XR_TYPE_API_LAYER_PROPERTIES"},
+    {XR_TYPE_EXTENSION_PROPERTIES, "XR_TYPE_EXTENSION_PROPERTIES"},
+    {XR_TYPE_INSTANCE_CREATE_INFO, "XR_TYPE_INSTANCE_CREATE_INFO"},
+    {XR_TYPE_SYSTEM_GET_INFO, "XR_TYPE_SYSTEM_GET_INFO"},
+    {XR_TYPE_SYSTEM_PROPERTIES, "XR_TYPE_SYSTEM_PROPERTIES"},
+    {XR_TYPE_VIEW_LOCATE_INFO, "XR_TYPE_VIEW_LOCATE_INFO"},
+    {XR_TYPE_VIEW, "XR_TYPE_VIEW"},
+    {XR_TYPE_SESSION_CREATE_INFO, "XR_TYPE_SESSION_CREATE_INFO"},
+    {XR_TYPE_SWAPCHAIN_CREATE_INFO, "XR_TYPE_SWAPCHAIN_CREATE_INFO"},
+    {XR_TYPE_SESSION_BEGIN_INFO, "XR_TYPE_SESSION_BEGIN_INFO"},
+    {XR_TYPE_VIEW_STATE, "XR_TYPE_VIEW_STATE"},
+    {XR_TYPE_FRAME_END_INFO, "XR_TYPE_FRAME_END_INFO"},
+    {XR_TYPE_HAPTIC_VIBRATION, "XR_TYPE_HAPTIC_VIBRATION"},
+    {XR_TYPE_EVENT_DATA_BUFFER, "XR_TYPE_EVENT_DATA_BUFFER"},
+    {XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING, "XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING"},
+    {XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED, "XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED"},
+    {XR_TYPE_ACTION_STATE_BOOLEAN, "XR_TYPE_ACTION_STATE_BOOLEAN"},
+    {XR_TYPE_ACTION_STATE_FLOAT, "XR_TYPE_ACTION_STATE_FLOAT"},
+    {XR_TYPE_ACTION_STATE_VECTOR2F, "XR_TYPE_ACTION_STATE_VECTOR2F"},
+    {XR_TYPE_ACTION_STATE_POSE, "XR_TYPE_ACTION_STATE_POSE"},
+    {XR_TYPE_ACTION_SET_CREATE_INFO, "XR_TYPE_ACTION_SET_CREATE_INFO"},
+    {XR_TYPE_ACTION_CREATE_INFO, "XR_TYPE_ACTION_CREATE_INFO"},
+    {XR_TYPE_INSTANCE_PROPERTIES, "XR_TYPE_INSTANCE_PROPERTIES"},
+    {XR_TYPE_FRAME_WAIT_INFO, "XR_TYPE_FRAME_WAIT_INFO"},
+    {XR_TYPE_COMPOSITION_LAYER_PROJECTION, "XR_TYPE_COMPOSITION_LAYER_PROJECTION"},
+    {XR_TYPE_COMPOSITION_LAYER_QUAD, "XR_TYPE_COMPOSITION_LAYER_QUAD"},
+    {XR_TYPE_REFERENCE_SPACE_CREATE_INFO, "XR_TYPE_REFERENCE_SPACE_CREATE_INFO"},
+    {XR_TYPE_ACTION_SPACE_CREATE_INFO, "XR_TYPE_ACTION_SPACE_CREATE_INFO"},
+    {XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING, "XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING"},
+    {XR_TYPE_VIEW_CONFIGURATION_VIEW, "XR_TYPE_VIEW_CONFIGURATION_VIEW"},
+    {XR_TYPE_SPACE_LOCATION, "XR_TYPE_SPACE_LOCATION"},
+    {XR_TYPE_SPACE_VELOCITY, "XR_TYPE_SPACE_VELOCITY"},
+    {XR_TYPE_FRAME_STATE, "XR_TYPE_FRAME_STATE"},
+    {XR_TYPE_VIEW_CONFIGURATION_PROPERTIES, "XR_TYPE_VIEW_CONFIGURATION_PROPERTIES"},
+    {XR_TYPE_FRAME_BEGIN_INFO, "XR_TYPE_FRAME_BEGIN_INFO"},
+    {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW, "XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW"},
+    {XR_TYPE_EVENT_DATA_EVENTS_LOST, "XR_TYPE_EVENT_DATA_EVENTS_LOST"},
+    {XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING, "XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING"},
+    {XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED, "XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED"},
+    {XR_TYPE_INTERACTION_PROFILE_STATE, "XR_TYPE_INTERACTION_PROFILE_STATE"},
+    {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO, "XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO"},
+    {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, "XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO"},
+    {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO, "XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO"},
+    {XR_TYPE_ACTION_STATE_GET_INFO, "XR_TYPE_ACTION_STATE_GET_INFO"},
+    {XR_TYPE_HAPTIC_ACTION_INFO, "XR_TYPE_HAPTIC_ACTION_INFO"},
+    {XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO, "XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO"},
+    {XR_TYPE_ACTIONS_SYNC_INFO, "XR_TYPE_ACTIONS_SYNC_INFO"},
+    {XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO, "XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO"},
+    {XR_TYPE_INPUT_SOURCE_LOCALIZED_NAME_GET_INFO, "XR_TYPE_INPUT_SOURCE_LOCALIZED_NAME_GET_INFO"},
+    {XR_TYPE_COMPOSITION_LAYER_CUBE_KHR, "XR_TYPE_COMPOSITION_LAYER_CUBE_KHR"},
+    {XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR, "XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR"},
+    {XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR, "XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR"},
+    {XR_TYPE_COMPOSITION_LAYER_EQUIRECT_KHR, "XR_TYPE_COMPOSITION_LAYER_EQUIRECT_KHR"},
+    {XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR, "XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR"},
+    {XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR, "XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR"},
+    {XR_TYPE_GRAPHICS_BINDING_OPENGL_XCB_KHR, "XR_TYPE_GRAPHICS_BINDING_OPENGL_XCB_KHR"},
+    {XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR, "XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR"},
+    {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR, "XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR"},
+    {XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR, "XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR"},
+};
+
+// Rest of the runtime functions (simplified versions)
+XRAPI_ATTR XrResult XRAPI_CALL xrResultToString(XrInstance instance, XrResult value,
+                                                char buffer[XR_MAX_RESULT_STRING_SIZE]) {
+    auto it = g_resultStrings.find(value);
+    if (it != g_resultStrings.end()) {
+        safe_copy_string(buffer, XR_MAX_RESULT_STRING_SIZE, it->second);
+    } else {
+        std::snprintf(buffer, XR_MAX_RESULT_STRING_SIZE, "XR_UNKNOWN_RESULT_%d", value);
+    }
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrStructureTypeToString(XrInstance instance, XrStructureType value,
+                                                       char buffer[XR_MAX_STRUCTURE_NAME_SIZE]) {
+    auto it = g_structureTypeStrings.find(value);
+    if (it != g_structureTypeStrings.end()) {
+        safe_copy_string(buffer, XR_MAX_STRUCTURE_NAME_SIZE, it->second);
+    } else {
+        std::snprintf(buffer, XR_MAX_STRUCTURE_NAME_SIZE, "XR_UNKNOWN_STRUCTURE_TYPE_%d", value);
+    }
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSystem(XrInstance instance, const XrSystemGetInfo* getInfo, XrSystemId* systemId) {
+    LOG_DEBUG("xrGetSystem called");
+    if (!getInfo || !systemId) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    *systemId = 1;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSystemProperties(XrInstance instance, XrSystemId systemId,
+                                                     XrSystemProperties* properties) {
+    LOG_DEBUG("xrGetSystemProperties called");
+    if (!properties) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    properties->systemId = systemId;
+    safe_copy_string(properties->systemName, XR_MAX_SYSTEM_NAME_SIZE, "ox Virtual HMD");
+    properties->graphicsProperties.maxSwapchainImageWidth = 2048;
+    properties->graphicsProperties.maxSwapchainImageHeight = 2048;
+    properties->graphicsProperties.maxLayerCount = 16;
+    properties->trackingProperties.orientationTracking = XR_TRUE;
+    properties->trackingProperties.positionTracking = XR_TRUE;
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurations(XrInstance instance, XrSystemId systemId,
+                                                             uint32_t viewConfigurationTypeCapacityInput,
+                                                             uint32_t* viewConfigurationTypeCountOutput,
+                                                             XrViewConfigurationType* viewConfigurationTypes) {
+    LOG_DEBUG("xrEnumerateViewConfigurations called");
+    const XrViewConfigurationType configs[] = {XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO};
+
+    if (viewConfigurationTypeCountOutput) {
+        *viewConfigurationTypeCountOutput = 1;
+    }
+
+    if (viewConfigurationTypeCapacityInput > 0 && viewConfigurationTypes) {
+        viewConfigurationTypes[0] = configs[0];
+    }
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetViewConfigurationProperties(
+    XrInstance instance, XrSystemId systemId, XrViewConfigurationType viewConfigurationType,
+    XrViewConfigurationProperties* configurationProperties) {
+    LOG_DEBUG("xrGetViewConfigurationProperties called");
+    if (!configurationProperties) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    configurationProperties->viewConfigurationType = viewConfigurationType;
+    configurationProperties->fovMutable = XR_FALSE;
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurationViews(XrInstance instance, XrSystemId systemId,
+                                                                 XrViewConfigurationType viewConfigurationType,
+                                                                 uint32_t viewCapacityInput, uint32_t* viewCountOutput,
+                                                                 XrViewConfigurationView* views) {
+    LOG_DEBUG("xrEnumerateViewConfigurationViews called");
+
+    if (viewCountOutput) {
+        *viewCountOutput = 2;  // Stereo
+    }
+
+    if (viewCapacityInput > 0 && views) {
+        for (uint32_t i = 0; i < 2 && i < viewCapacityInput; i++) {
+            views[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
+            views[i].recommendedImageRectWidth = 1024;
+            views[i].maxImageRectWidth = 2048;
+            views[i].recommendedImageRectHeight = 1024;
+            views[i].maxImageRectHeight = 2048;
+            views[i].recommendedSwapchainSampleCount = 1;
+            views[i].maxSwapchainSampleCount = 4;
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateEnvironmentBlendModes(XrInstance instance, XrSystemId systemId,
+                                                                XrViewConfigurationType viewConfigurationType,
+                                                                uint32_t environmentBlendModeCapacityInput,
+                                                                uint32_t* environmentBlendModeCountOutput,
+                                                                XrEnvironmentBlendMode* environmentBlendModes) {
+    LOG_DEBUG("xrEnumerateEnvironmentBlendModes called");
+
+    if (environmentBlendModeCountOutput) {
+        *environmentBlendModeCountOutput = 1;
+    }
+
+    if (environmentBlendModeCapacityInput > 0 && environmentBlendModes) {
+        environmentBlendModes[0] = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+    }
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSessionCreateInfo* createInfo,
+                                               XrSession* session) {
+    LOG_DEBUG("xrCreateSession called");
+    if (!createInfo || !session) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    // Send message to service
+    ServiceConnection::Instance().SendRequest(MessageType::CREATE_SESSION);
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    XrSession newSession = createHandle<XrSession>();
+    g_sessions[newSession] = instance;
+    *session = newSession;
+
+    LOG_INFO("Session created");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySession(XrSession session) {
+    LOG_DEBUG("xrDestroySession called");
+
+    ServiceConnection::Instance().SendRequest(MessageType::DESTROY_SESSION);
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    g_sessions.erase(session);
+
+    LOG_INFO("Session destroyed");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrBeginSession(XrSession session, const XrSessionBeginInfo* beginInfo) {
+    LOG_DEBUG("xrBeginSession called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEndSession(XrSession session) {
+    LOG_DEBUG("xrEndSession called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrRequestExitSession(XrSession session) {
+    LOG_DEBUG("xrRequestExitSession called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateReferenceSpaces(XrSession session, uint32_t spaceCapacityInput,
+                                                          uint32_t* spaceCountOutput, XrReferenceSpaceType* spaces) {
+    LOG_DEBUG("xrEnumerateReferenceSpaces called");
+    const XrReferenceSpaceType supportedSpaces[] = {XR_REFERENCE_SPACE_TYPE_VIEW, XR_REFERENCE_SPACE_TYPE_LOCAL,
+                                                    XR_REFERENCE_SPACE_TYPE_STAGE};
+
+    if (spaceCountOutput) {
+        *spaceCountOutput = 3;
+    }
+
+    if (spaceCapacityInput > 0 && spaces) {
+        uint32_t count = spaceCapacityInput < 3 ? spaceCapacityInput : 3;
+        for (uint32_t i = 0; i < count; i++) {
+            spaces[i] = supportedSpaces[i];
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session, const XrReferenceSpaceCreateInfo* createInfo,
+                                                      XrSpace* space) {
+    LOG_DEBUG("xrCreateReferenceSpace called");
+    if (!createInfo || !space) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    XrSpace newSpace = createHandle<XrSpace>();
+    g_spaces[newSpace] = session;
+    *space = newSpace;
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpace(XrSpace space) {
+    LOG_DEBUG("xrDestroySpace called");
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    g_spaces.erase(space);
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, XrTime time, XrSpaceLocation* location) {
+    LOG_DEBUG("xrLocateSpace called");
+    if (!location) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    location->locationFlags = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
+                              XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT | XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
+    location->pose.orientation.x = 0.0f;
+    location->pose.orientation.y = 0.0f;
+    location->pose.orientation.z = 0.0f;
+    location->pose.orientation.w = 1.0f;
+    location->pose.position.x = 0.0f;
+    location->pose.position.y = 1.6f;  // Eye height
+    location->pose.position.z = 0.0f;
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitInfo* frameWaitInfo,
+                                           XrFrameState* frameState) {
+    LOG_DEBUG("xrWaitFrame called");
+    if (!frameState) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    // Read frame data from shared memory
+    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    if (shared_data) {
+        frameState->predictedDisplayTime =
+            shared_data->frame_state.predicted_display_time.load(std::memory_order_acquire);
+        frameState->predictedDisplayPeriod = 11111111;  // ~90 FPS
+    } else {
+        frameState->predictedDisplayTime = 0;
+        frameState->predictedDisplayPeriod = 11111111;
+    }
+
+    frameState->shouldRender = XR_TRUE;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const XrFrameBeginInfo* frameBeginInfo) {
+    LOG_DEBUG("xrBeginFrame called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInfo* frameEndInfo) {
+    LOG_DEBUG("xrEndFrame called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLocateInfo* viewLocateInfo,
+                                             XrViewState* viewState, uint32_t viewCapacityInput,
+                                             uint32_t* viewCountOutput, XrView* views) {
+    LOG_DEBUG("xrLocateViews called");
+    if (!viewLocateInfo || !viewState || !viewCountOutput) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    *viewCountOutput = 2;
+
+    if (viewCapacityInput == 0) {
+        return XR_SUCCESS;
+    }
+
+    viewState->viewStateFlags = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+
+    // Read pose data from shared memory
+    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    if (views && viewCapacityInput >= 2 && shared_data) {
+        uint32_t view_count = shared_data->frame_state.view_count.load(std::memory_order_acquire);
+
+        for (uint32_t i = 0; i < 2 && i < viewCapacityInput; i++) {
+            views[i].type = XR_TYPE_VIEW;
+            views[i].next = nullptr;
+
+            auto& view_data = shared_data->frame_state.views[i];
+
+            views[i].pose.position.x = view_data.pose.position[0];
+            views[i].pose.position.y = view_data.pose.position[1];
+            views[i].pose.position.z = view_data.pose.position[2];
+
+            views[i].pose.orientation.x = view_data.pose.orientation[0];
+            views[i].pose.orientation.y = view_data.pose.orientation[1];
+            views[i].pose.orientation.z = view_data.pose.orientation[2];
+            views[i].pose.orientation.w = view_data.pose.orientation[3];
+
+            views[i].fov.angleLeft = view_data.fov[0];
+            views[i].fov.angleRight = view_data.fov[1];
+            views[i].fov.angleUp = view_data.fov[2];
+            views[i].fov.angleDown = view_data.fov[3];
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+// Action system stubs
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance, const XrActionSetCreateInfo* createInfo,
+                                                 XrActionSet* actionSet) {
+    LOG_DEBUG("xrCreateActionSet called");
+    if (!createInfo || !actionSet) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    *actionSet = createHandle<XrActionSet>();
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyActionSet(XrActionSet actionSet) {
+    LOG_DEBUG("xrDestroyActionSet called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrActionCreateInfo* createInfo,
+                                              XrAction* action) {
+    LOG_DEBUG("xrCreateAction called");
+    if (!createInfo || !action) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    *action = createHandle<XrAction>();
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyAction(XrAction action) {
+    LOG_DEBUG("xrDestroyAction called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
+    XrInstance instance, const XrInteractionProfileSuggestedBinding* suggestedBindings) {
+    LOG_DEBUG("xrSuggestInteractionProfileBindings called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrAttachSessionActionSets(XrSession session,
+                                                         const XrSessionActionSetsAttachInfo* attachInfo) {
+    LOG_DEBUG("xrAttachSessionActionSets called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetCurrentInteractionProfile(XrSession session, XrPath topLevelUserPath,
+                                                              XrInteractionProfileState* interactionProfile) {
+    LOG_DEBUG("xrGetCurrentInteractionProfile called");
+    if (!interactionProfile) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    interactionProfile->interactionProfile = XR_NULL_PATH;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrSyncActions(XrSession session, const XrActionsSyncInfo* syncInfo) {
+    LOG_DEBUG("xrSyncActions called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateBoolean(XrSession session, const XrActionStateGetInfo* getInfo,
+                                                       XrActionStateBoolean* state) {
+    LOG_DEBUG("xrGetActionStateBoolean called");
+    if (!state) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    state->currentState = XR_FALSE;
+    state->changedSinceLastSync = XR_FALSE;
+    state->lastChangeTime = 0;
+    state->isActive = XR_FALSE;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateFloat(XrSession session, const XrActionStateGetInfo* getInfo,
+                                                     XrActionStateFloat* state) {
+    LOG_DEBUG("xrGetActionStateFloat called");
+    if (!state) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    state->currentState = 0.0f;
+    state->changedSinceLastSync = XR_FALSE;
+    state->lastChangeTime = 0;
+    state->isActive = XR_FALSE;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateVector2f(XrSession session, const XrActionStateGetInfo* getInfo,
+                                                        XrActionStateVector2f* state) {
+    LOG_DEBUG("xrGetActionStateVector2f called");
+    if (!state) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    state->currentState.x = 0.0f;
+    state->currentState.y = 0.0f;
+    state->changedSinceLastSync = XR_FALSE;
+    state->lastChangeTime = 0;
+    state->isActive = XR_FALSE;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStatePose(XrSession session, const XrActionStateGetInfo* getInfo,
+                                                    XrActionStatePose* state) {
+    LOG_DEBUG("xrGetActionStatePose called");
+    if (!state) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    state->isActive = XR_FALSE;
+    return XR_SUCCESS;
+}
+
+// Swapchain functions
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, uint32_t formatCapacityInput,
+                                                           uint32_t* formatCountOutput, int64_t* formats) {
+    LOG_DEBUG("xrEnumerateSwapchainFormats called");
+    const int64_t supportedFormats[] = {0x1908, 0x8058};  // GL_RGBA, GL_RGBA8
+
+    if (formatCountOutput) {
+        *formatCountOutput = 2;
+    }
+
+    if (formatCapacityInput > 0 && formats) {
+        uint32_t count = formatCapacityInput < 2 ? formatCapacityInput : 2;
+        for (uint32_t i = 0; i < count; i++) {
+            formats[i] = supportedFormats[i];
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo* createInfo,
+                                                 XrSwapchain* swapchain) {
+    LOG_DEBUG("xrCreateSwapchain called");
+    if (!createInfo || !swapchain) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    *swapchain = createHandle<XrSwapchain>();
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
+    LOG_DEBUG("xrDestroySwapchain called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain, uint32_t imageCapacityInput,
+                                                          uint32_t* imageCountOutput,
+                                                          XrSwapchainImageBaseHeader* images) {
+    LOG_DEBUG("xrEnumerateSwapchainImages called");
+    const uint32_t numImages = 3;
+
+    if (imageCountOutput) {
+        *imageCountOutput = numImages;
+    }
+
+    if (imageCapacityInput > 0 && images) {
+        for (uint32_t i = 0; i < imageCapacityInput && i < numImages; i++) {
+            images[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR;
+            images[i].next = nullptr;
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrAcquireSwapchainImage(XrSwapchain swapchain,
+                                                       const XrSwapchainImageAcquireInfo* acquireInfo,
+                                                       uint32_t* index) {
+    LOG_DEBUG("xrAcquireSwapchainImage called");
+    if (index) {
+        *index = 0;
+    }
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrWaitSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageWaitInfo* waitInfo) {
+    LOG_DEBUG("xrWaitSwapchainImage called");
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrReleaseSwapchainImage(XrSwapchain swapchain,
+                                                       const XrSwapchainImageReleaseInfo* releaseInfo) {
+    LOG_DEBUG("xrReleaseSwapchainImage called");
+    return XR_SUCCESS;
+}
+
+// Path/string functions
+XRAPI_ATTR XrResult XRAPI_CALL xrStringToPath(XrInstance instance, const char* pathString, XrPath* path) {
+    LOG_DEBUG("xrStringToPath called");
+    if (!pathString || !path) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    *path = (XrPath)std::hash<std::string>{}(pathString);
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrPathToString(XrInstance instance, XrPath path, uint32_t bufferCapacityInput,
+                                              uint32_t* bufferCountOutput, char* buffer) {
+    LOG_DEBUG("xrPathToString called");
+    const char* str = "/unknown/path";
+    uint32_t len = strlen(str) + 1;
+
+    if (bufferCountOutput) {
+        *bufferCountOutput = len;
+    }
+
+    if (bufferCapacityInput > 0 && buffer) {
+        safe_copy_string(buffer, bufferCapacityInput, str);
+    }
+
+    return XR_SUCCESS;
+}
+
+// OpenGL extension
+XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
+    XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsOpenGLKHR* graphicsRequirements) {
+    LOG_DEBUG("xrGetOpenGLGraphicsRequirementsKHR called");
+    if (!graphicsRequirements) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    graphicsRequirements->minApiVersionSupported = XR_MAKE_VERSION(3, 3, 0);
+    graphicsRequirements->maxApiVersionSupported = XR_MAKE_VERSION(4, 6, 0);
+    return XR_SUCCESS;
+}
+
+// Function map initialization
+static void InitializeFunctionMap() {
+    g_clientFunctionMap["xrEnumerateApiLayerProperties"] = (PFN_xrVoidFunction)xrEnumerateApiLayerProperties;
+    g_clientFunctionMap["xrEnumerateInstanceExtensionProperties"] =
+        (PFN_xrVoidFunction)xrEnumerateInstanceExtensionProperties;
+    g_clientFunctionMap["xrCreateInstance"] = (PFN_xrVoidFunction)xrCreateInstance;
+    g_clientFunctionMap["xrDestroyInstance"] = (PFN_xrVoidFunction)xrDestroyInstance;
+    g_clientFunctionMap["xrGetInstanceProperties"] = (PFN_xrVoidFunction)xrGetInstanceProperties;
+    g_clientFunctionMap["xrPollEvent"] = (PFN_xrVoidFunction)xrPollEvent;
+    g_clientFunctionMap["xrResultToString"] = (PFN_xrVoidFunction)xrResultToString;
+    g_clientFunctionMap["xrStructureTypeToString"] = (PFN_xrVoidFunction)xrStructureTypeToString;
+    g_clientFunctionMap["xrGetSystem"] = (PFN_xrVoidFunction)xrGetSystem;
+    g_clientFunctionMap["xrGetSystemProperties"] = (PFN_xrVoidFunction)xrGetSystemProperties;
+    g_clientFunctionMap["xrEnumerateViewConfigurations"] = (PFN_xrVoidFunction)xrEnumerateViewConfigurations;
+    g_clientFunctionMap["xrGetViewConfigurationProperties"] = (PFN_xrVoidFunction)xrGetViewConfigurationProperties;
+    g_clientFunctionMap["xrEnumerateViewConfigurationViews"] = (PFN_xrVoidFunction)xrEnumerateViewConfigurationViews;
+    g_clientFunctionMap["xrEnumerateEnvironmentBlendModes"] = (PFN_xrVoidFunction)xrEnumerateEnvironmentBlendModes;
+    g_clientFunctionMap["xrCreateSession"] = (PFN_xrVoidFunction)xrCreateSession;
+    g_clientFunctionMap["xrDestroySession"] = (PFN_xrVoidFunction)xrDestroySession;
+    g_clientFunctionMap["xrBeginSession"] = (PFN_xrVoidFunction)xrBeginSession;
+    g_clientFunctionMap["xrEndSession"] = (PFN_xrVoidFunction)xrEndSession;
+    g_clientFunctionMap["xrRequestExitSession"] = (PFN_xrVoidFunction)xrRequestExitSession;
+    g_clientFunctionMap["xrEnumerateReferenceSpaces"] = (PFN_xrVoidFunction)xrEnumerateReferenceSpaces;
+    g_clientFunctionMap["xrCreateReferenceSpace"] = (PFN_xrVoidFunction)xrCreateReferenceSpace;
+    g_clientFunctionMap["xrDestroySpace"] = (PFN_xrVoidFunction)xrDestroySpace;
+    g_clientFunctionMap["xrLocateSpace"] = (PFN_xrVoidFunction)xrLocateSpace;
+    g_clientFunctionMap["xrWaitFrame"] = (PFN_xrVoidFunction)xrWaitFrame;
+    g_clientFunctionMap["xrBeginFrame"] = (PFN_xrVoidFunction)xrBeginFrame;
+    g_clientFunctionMap["xrEndFrame"] = (PFN_xrVoidFunction)xrEndFrame;
+    g_clientFunctionMap["xrLocateViews"] = (PFN_xrVoidFunction)xrLocateViews;
+    g_clientFunctionMap["xrCreateActionSet"] = (PFN_xrVoidFunction)xrCreateActionSet;
+    g_clientFunctionMap["xrDestroyActionSet"] = (PFN_xrVoidFunction)xrDestroyActionSet;
+    g_clientFunctionMap["xrCreateAction"] = (PFN_xrVoidFunction)xrCreateAction;
+    g_clientFunctionMap["xrDestroyAction"] = (PFN_xrVoidFunction)xrDestroyAction;
+    g_clientFunctionMap["xrSuggestInteractionProfileBindings"] =
+        (PFN_xrVoidFunction)xrSuggestInteractionProfileBindings;
+    g_clientFunctionMap["xrAttachSessionActionSets"] = (PFN_xrVoidFunction)xrAttachSessionActionSets;
+    g_clientFunctionMap["xrGetCurrentInteractionProfile"] = (PFN_xrVoidFunction)xrGetCurrentInteractionProfile;
+    g_clientFunctionMap["xrSyncActions"] = (PFN_xrVoidFunction)xrSyncActions;
+    g_clientFunctionMap["xrGetActionStateBoolean"] = (PFN_xrVoidFunction)xrGetActionStateBoolean;
+    g_clientFunctionMap["xrGetActionStateFloat"] = (PFN_xrVoidFunction)xrGetActionStateFloat;
+    g_clientFunctionMap["xrGetActionStateVector2f"] = (PFN_xrVoidFunction)xrGetActionStateVector2f;
+    g_clientFunctionMap["xrGetActionStatePose"] = (PFN_xrVoidFunction)xrGetActionStatePose;
+    g_clientFunctionMap["xrEnumerateSwapchainFormats"] = (PFN_xrVoidFunction)xrEnumerateSwapchainFormats;
+    g_clientFunctionMap["xrCreateSwapchain"] = (PFN_xrVoidFunction)xrCreateSwapchain;
+    g_clientFunctionMap["xrDestroySwapchain"] = (PFN_xrVoidFunction)xrDestroySwapchain;
+    g_clientFunctionMap["xrEnumerateSwapchainImages"] = (PFN_xrVoidFunction)xrEnumerateSwapchainImages;
+    g_clientFunctionMap["xrAcquireSwapchainImage"] = (PFN_xrVoidFunction)xrAcquireSwapchainImage;
+    g_clientFunctionMap["xrWaitSwapchainImage"] = (PFN_xrVoidFunction)xrWaitSwapchainImage;
+    g_clientFunctionMap["xrReleaseSwapchainImage"] = (PFN_xrVoidFunction)xrReleaseSwapchainImage;
+    g_clientFunctionMap["xrStringToPath"] = (PFN_xrVoidFunction)xrStringToPath;
+    g_clientFunctionMap["xrPathToString"] = (PFN_xrVoidFunction)xrPathToString;
+    g_clientFunctionMap["xrGetOpenGLGraphicsRequirementsKHR"] = (PFN_xrVoidFunction)xrGetOpenGLGraphicsRequirementsKHR;
+}
+
+// xrGetInstanceProcAddr
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const char* name,
+                                                     PFN_xrVoidFunction* function) {
+    LOG_DEBUG("xrGetInstanceProcAddr called");
+    if (!name || !function) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    if (g_clientFunctionMap.empty()) {
+        InitializeFunctionMap();
+    }
+
+    auto it = g_clientFunctionMap.find(name);
+    if (it != g_clientFunctionMap.end()) {
+        *function = it->second;
+        return XR_SUCCESS;
+    }
+
+    *function = nullptr;
+    return XR_ERROR_FUNCTION_UNSUPPORTED;
+}
+
+// Negotiation function
+extern "C" RUNTIME_EXPORT XRAPI_ATTR XrResult XRAPI_CALL
+xrNegotiateLoaderRuntimeInterface(const XrNegotiateLoaderInfo* loaderInfo, XrNegotiateRuntimeRequest* runtimeRequest) {
+    LOG_DEBUG("xrNegotiateLoaderRuntimeInterface called");
+    if (!loaderInfo || !runtimeRequest) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    if (loaderInfo->structType != XR_LOADER_INTERFACE_STRUCT_LOADER_INFO ||
+        loaderInfo->structVersion != XR_LOADER_INFO_STRUCT_VERSION ||
+        loaderInfo->structSize != sizeof(XrNegotiateLoaderInfo)) {
+        return XR_ERROR_INITIALIZATION_FAILED;
+    }
+
+    if (runtimeRequest->structType != XR_LOADER_INTERFACE_STRUCT_RUNTIME_REQUEST ||
+        runtimeRequest->structVersion != XR_RUNTIME_INFO_STRUCT_VERSION ||
+        runtimeRequest->structSize != sizeof(XrNegotiateRuntimeRequest)) {
+        return XR_ERROR_INITIALIZATION_FAILED;
+    }
+
+    runtimeRequest->runtimeInterfaceVersion = XR_CURRENT_LOADER_RUNTIME_VERSION;
+    runtimeRequest->runtimeApiVersion = XR_CURRENT_API_VERSION;
+    runtimeRequest->getInstanceProcAddr = xrGetInstanceProcAddr;
+
+    return XR_SUCCESS;
+}
