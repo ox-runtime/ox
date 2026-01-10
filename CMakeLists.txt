@@ -29,9 +29,9 @@ message(STATUS "Using OpenXR SDK from FetchContent: ${openxr_SOURCE_DIR}")
 
 # Platform-specific link libraries
 if(WIN32)
-    set(PLATFORM_LIBS)
+    set(SERVICE_LIBS)
 else()
-    set(PLATFORM_LIBS pthread rt)
+    set(SERVICE_LIBS pthread rt dl)
 endif()
 
 # Service executable
@@ -43,9 +43,10 @@ add_executable(ox-service
 target_include_directories(ox-service PRIVATE
     ${OPENXR_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(ox-service PRIVATE ${PLATFORM_LIBS})
+target_link_libraries(ox-service PRIVATE ${SERVICE_LIBS})
 
 set_target_properties(ox-service PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
@@ -64,8 +65,6 @@ target_include_directories(ox PRIVATE
     ${OPENXR_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-
-target_link_libraries(ox PRIVATE ${PLATFORM_LIBS})
 
 # Set output directory to build/bin (disable per-config subdirectories)
 set_target_properties(ox PROPERTIES

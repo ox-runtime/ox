@@ -1,17 +1,27 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <linux/limits.h>
+#include <unistd.h>
+#endif
+
 #include "../logging.h"
 #include "../protocol/control_channel.h"
 #include "../protocol/messages.h"
 #include "../protocol/shared_memory.h"
+#include "driver_loader.h"
 
 using namespace ox::protocol;
+namespace fs = std::filesystem;
 
 class OxService {
    public:
@@ -19,6 +29,12 @@ class OxService {
 
     bool Initialize() {
         LOG_INFO("ox-service: Initializing...");
+
+        // Load headset driver first
+        if (!LoadDriver()) {
+            LOG_ERROR("Failed to load headset driver");
+            return false;
+        }
 
         // Create shared memory (only for dynamic data)
         if (!shared_mem_.Create("ox_runtime_shm", sizeof(SharedData), true)) {
@@ -103,6 +119,57 @@ class OxService {
     }
 
    private:
+    bool LoadDriver() {
+        // Get executable path to find drivers folder
+        fs::path exe_path;
+#ifdef _WIN32
+        char path[MAX_PATH];
+        GetModuleFileNameA(NULL, path, MAX_PATH);
+        exe_path = fs::path(path);
+#else
+        char path[PATH_MAX];
+        ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+        if (len != -1) {
+            path[len] = '\0';
+            exe_path = fs::path(path);
+        }
+#endif
+
+        fs::path drivers_dir = exe_path.parent_path() / "drivers";
+
+        if (!fs::exists(drivers_dir)) {
+            LOG_ERROR(("Drivers folder not found: " + drivers_dir.string()).c_str());
+            return false;
+        }
+
+        LOG_INFO(("Scanning for drivers in: " + drivers_dir.string()).c_str());
+
+        // Scan for drivers (first-found wins)
+        for (const auto& entry : fs::directory_iterator(drivers_dir)) {
+            if (!entry.is_directory()) continue;
+
+            fs::path driver_path = entry.path();
+            LOG_INFO(("Checking driver: " + driver_path.filename().string()).c_str());
+
+            // Try to load this driver
+            if (driver_.LoadDriver(driver_path.string())) {
+                // Check if device is connected
+                if (driver_.IsDeviceConnected()) {
+                    OxDeviceInfo info;
+                    driver_.GetDeviceInfo(&info);
+                    LOG_INFO(("Loaded driver: " + std::string(info.name)).c_str());
+                    return true;
+                } else {
+                    LOG_INFO("Driver loaded but device not connected");
+                    driver_.Unload();
+                }
+            }
+        }
+
+        LOG_ERROR("No connected headset found");
+        return false;
+    }
+
     void InitializeRuntimeProperties() {
         std::strncpy(runtime_props_.runtime_name, "ox", sizeof(runtime_props_.runtime_name) - 1);
         runtime_props_.runtime_name[sizeof(runtime_props_.runtime_name) - 1] = '\0';
@@ -113,20 +180,35 @@ class OxService {
     }
 
     void InitializeSystemProperties() {
-        std::strncpy(system_props_.system_name, "ox Virtual HMD", sizeof(system_props_.system_name) - 1);
+        // Get system name from driver
+        OxDeviceInfo device_info;
+        driver_.GetDeviceInfo(&device_info);
+        std::strncpy(system_props_.system_name, device_info.name, sizeof(system_props_.system_name) - 1);
         system_props_.system_name[sizeof(system_props_.system_name) - 1] = '\0';
-        system_props_.max_swapchain_width = 2048;
-        system_props_.max_swapchain_height = 2048;
+
+        // Get display properties from driver
+        OxDisplayProperties display_props;
+        driver_.GetDisplayProperties(&display_props);
+        system_props_.max_swapchain_width = display_props.display_width;
+        system_props_.max_swapchain_height = display_props.display_height;
         system_props_.max_layer_count = 16;
-        system_props_.orientation_tracking = 1;  // XR_TRUE
-        system_props_.position_tracking = 1;     // XR_TRUE
+
+        // Get tracking capabilities from driver
+        OxTrackingCapabilities tracking_caps;
+        driver_.GetTrackingCapabilities(&tracking_caps);
+        system_props_.orientation_tracking = tracking_caps.has_orientation_tracking;
+        system_props_.position_tracking = tracking_caps.has_position_tracking;
     }
 
     void InitializeViewConfigurations() {
-        // Left and right eye configurations (same for stereo)
+        // Get display properties from driver
+        OxDisplayProperties display_props;
+        driver_.GetDisplayProperties(&display_props);
+
+        // Left and right eye configurations
         for (int i = 0; i < 2; i++) {
-            view_configs_.views[i].recommended_width = 1024;
-            view_configs_.views[i].recommended_height = 1024;
+            view_configs_.views[i].recommended_width = display_props.recommended_width;
+            view_configs_.views[i].recommended_height = display_props.recommended_height;
             view_configs_.views[i].recommended_sample_count = 1;
             view_configs_.views[i].max_sample_count = 4;
         }
@@ -349,7 +431,7 @@ class OxService {
         while (running_) {
             next_frame += frame_interval;
 
-            // Generate mock tracking data
+            // Generate tracking data from driver
             UpdatePoseData();
 
             // Sleep until next frame
@@ -366,40 +448,48 @@ class OxService {
         uint64_t frame_id = frame_counter_++;
         frame.frame_id.store(frame_id, std::memory_order_release);
 
-        // Mock timestamp (nanoseconds)
+        // Get timestamp (nanoseconds)
         auto now = std::chrono::steady_clock::now();
         auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch());
-        frame.predicted_display_time.store(ns.count(), std::memory_order_release);
+        int64_t predicted_time = ns.count();
+        frame.predicted_display_time.store(predicted_time, std::memory_order_release);
 
-        // Mock poses for stereo views
+        // Get poses from driver
         frame.view_count.store(2, std::memory_order_release);
 
+        OxPose view_pose;
+
         // Left eye
-        frame.views[0].pose.position[0] = -0.032f;  // IPD/2
-        frame.views[0].pose.position[1] = 1.6f;     // Eye height
-        frame.views[0].pose.position[2] = 0.0f;
-        frame.views[0].pose.orientation[0] = 0.0f;
-        frame.views[0].pose.orientation[1] = 0.0f;
-        frame.views[0].pose.orientation[2] = 0.0f;
-        frame.views[0].pose.orientation[3] = 1.0f;
-        frame.views[0].pose.timestamp = ns.count();
+        driver_.UpdateViewPose(predicted_time, 0, &view_pose);
+        frame.views[0].pose.position[0] = view_pose.position.x;
+        frame.views[0].pose.position[1] = view_pose.position.y;
+        frame.views[0].pose.position[2] = view_pose.position.z;
+        frame.views[0].pose.orientation[0] = view_pose.orientation.x;
+        frame.views[0].pose.orientation[1] = view_pose.orientation.y;
+        frame.views[0].pose.orientation[2] = view_pose.orientation.z;
+        frame.views[0].pose.orientation[3] = view_pose.orientation.w;
+        frame.views[0].pose.timestamp = predicted_time;
 
         // Right eye
-        frame.views[1].pose.position[0] = 0.032f;  // IPD/2
-        frame.views[1].pose.position[1] = 1.6f;
-        frame.views[1].pose.position[2] = 0.0f;
-        frame.views[1].pose.orientation[0] = 0.0f;
-        frame.views[1].pose.orientation[1] = 0.0f;
-        frame.views[1].pose.orientation[2] = 0.0f;
-        frame.views[1].pose.orientation[3] = 1.0f;
-        frame.views[1].pose.timestamp = ns.count();
+        driver_.UpdateViewPose(predicted_time, 1, &view_pose);
+        frame.views[1].pose.position[0] = view_pose.position.x;
+        frame.views[1].pose.position[1] = view_pose.position.y;
+        frame.views[1].pose.position[2] = view_pose.position.z;
+        frame.views[1].pose.orientation[0] = view_pose.orientation.x;
+        frame.views[1].pose.orientation[1] = view_pose.orientation.y;
+        frame.views[1].pose.orientation[2] = view_pose.orientation.z;
+        frame.views[1].pose.orientation[3] = view_pose.orientation.w;
+        frame.views[1].pose.timestamp = predicted_time;
 
-        // Mock FOV
+        // Get FOV from driver
+        OxDisplayProperties display_props;
+        driver_.GetDisplayProperties(&display_props);
+
         for (int i = 0; i < 2; i++) {
-            frame.views[i].fov[0] = -0.785f;  // ~45 deg left
-            frame.views[i].fov[1] = 0.785f;   // ~45 deg right
-            frame.views[i].fov[2] = 0.785f;   // ~45 deg up
-            frame.views[i].fov[3] = -0.785f;  // ~45 deg down
+            frame.views[i].fov[0] = display_props.fov.angle_left;
+            frame.views[i].fov[1] = display_props.fov.angle_right;
+            frame.views[i].fov[2] = display_props.fov.angle_up;
+            frame.views[i].fov[3] = display_props.fov.angle_down;
         }
     }
 
@@ -408,6 +498,9 @@ class OxService {
     SharedData* shared_data_;
     std::atomic<bool> running_;
     std::atomic<uint64_t> frame_counter_;
+
+    // Driver
+    ox::driver::DriverLoader driver_;
 
     // Static properties (queried via control channel, not in shared memory)
     RuntimePropertiesResponse runtime_props_;
