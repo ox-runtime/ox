@@ -28,9 +28,22 @@ class ServiceConnection {
     // Send control message and wait for response
     bool SendRequest(protocol::MessageType type, const void* payload = nullptr, uint32_t payload_size = 0);
 
+    // Allocate a handle from the service
+    uint64_t AllocateHandle(protocol::HandleType type);
+
+    // Get next event from service (returns true if event available)
+    bool GetNextEvent(protocol::SessionStateEvent& event);
+
+    // Get cached static metadata (queried once on connect)
+    const protocol::RuntimePropertiesResponse& GetRuntimeProperties() const { return runtime_props_; }
+    const protocol::SystemPropertiesResponse& GetSystemProperties() const { return system_props_; }
+    const protocol::ViewConfigurationsResponse& GetViewConfigurations() const { return view_configs_; }
+
    private:
     ServiceConnection() : shared_data_(nullptr), connected_(false), sequence_(0) {}
     ~ServiceConnection() { Disconnect(); }
+
+    bool QueryStaticMetadata();
 
     protocol::SharedMemory shared_mem_;
     protocol::ControlChannel control_;
@@ -38,6 +51,11 @@ class ServiceConnection {
     std::atomic<bool> connected_;
     std::atomic<uint32_t> sequence_;
     std::mutex send_mutex_;
+
+    // Cached static metadata (queried once on connect)
+    protocol::RuntimePropertiesResponse runtime_props_;
+    protocol::SystemPropertiesResponse system_props_;
+    protocol::ViewConfigurationsResponse view_configs_;
 };
 
 }  // namespace client

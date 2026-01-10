@@ -15,20 +15,18 @@
 #include <openxr/openxr_platform.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 
 #include "../logging.h"
 #include "service_connection.h"
-
-// Runtime information
-#define RUNTIME_NAME "ox"
-#define RUNTIME_VERSION XR_MAKE_VERSION(1, 0, 0)
 
 using namespace ox::client;
 using namespace ox::protocol;
@@ -45,13 +43,6 @@ static std::unordered_map<XrInstance, bool> g_instances;
 static std::unordered_map<XrSession, XrInstance> g_sessions;
 static std::unordered_map<XrSpace, XrSession> g_spaces;
 static std::mutex g_instance_mutex;
-static uint64_t g_next_handle = 1;
-
-// Helper to generate unique handles
-template <typename T>
-T createHandle() {
-    return (T)(uintptr_t)(g_next_handle++);
-}
 
 // Safe string copy helper - modern C++17+ replacement for strncpy
 inline void safe_copy_string(char* dest, size_t dest_size, std::string_view src) {
@@ -135,7 +126,13 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreateInfo* crea
 
     // Create instance handle
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    XrInstance newInstance = createHandle<XrInstance>();
+    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::INSTANCE);
+    if (handle == 0) {
+        LOG_ERROR("Failed to allocate instance handle from service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+
+    XrInstance newInstance = (XrInstance)(uintptr_t)handle;
     g_instances[newInstance] = true;
     *instance = newInstance;
 
@@ -178,8 +175,12 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProperties(XrInstance instance, XrIn
         return XR_ERROR_HANDLE_INVALID;
     }
 
-    instanceProperties->runtimeVersion = RUNTIME_VERSION;
-    safe_copy_string(instanceProperties->runtimeName, XR_MAX_RUNTIME_NAME_SIZE, RUNTIME_NAME);
+    // Get runtime properties from cached metadata
+    auto& props = ServiceConnection::Instance().GetRuntimeProperties();
+    uint32_t version =
+        XR_MAKE_VERSION(props.runtime_version_major, props.runtime_version_minor, props.runtime_version_patch);
+    instanceProperties->runtimeVersion = version;
+    safe_copy_string(instanceProperties->runtimeName, XR_MAX_RUNTIME_NAME_SIZE, props.runtime_name);
 
     return XR_SUCCESS;
 }
@@ -191,43 +192,44 @@ XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffe
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    static bool readySent = false;
-    static bool synchronizedSent = false;
-    static bool focusedSent = false;
-
-    if (!readySent) {
+    // Get next event from service
+    SessionStateEvent service_event;
+    if (ServiceConnection::Instance().GetNextEvent(service_event)) {
         XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
         stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
         stateEvent->next = nullptr;
-        stateEvent->session = (XrSession)1;
-        stateEvent->state = XR_SESSION_STATE_READY;
-        stateEvent->time = 0;
-        readySent = true;
-        LOG_INFO("Session state: READY");
-        return XR_SUCCESS;
-    }
+        stateEvent->session = (XrSession)(uintptr_t)service_event.session_handle;
+        stateEvent->time = service_event.timestamp;
 
-    if (!synchronizedSent) {
-        XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
-        stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
-        stateEvent->next = nullptr;
-        stateEvent->session = (XrSession)1;
-        stateEvent->state = XR_SESSION_STATE_SYNCHRONIZED;
-        stateEvent->time = 0;
-        synchronizedSent = true;
-        LOG_INFO("Session state: SYNCHRONIZED");
-        return XR_SUCCESS;
-    }
+        // Convert service SessionState to XrSessionState
+        switch (service_event.state) {
+            case SessionState::IDLE:
+                stateEvent->state = XR_SESSION_STATE_IDLE;
+                break;
+            case SessionState::READY:
+                stateEvent->state = XR_SESSION_STATE_READY;
+                break;
+            case SessionState::SYNCHRONIZED:
+                stateEvent->state = XR_SESSION_STATE_SYNCHRONIZED;
+                break;
+            case SessionState::VISIBLE:
+                stateEvent->state = XR_SESSION_STATE_VISIBLE;
+                break;
+            case SessionState::FOCUSED:
+                stateEvent->state = XR_SESSION_STATE_FOCUSED;
+                break;
+            case SessionState::STOPPING:
+                stateEvent->state = XR_SESSION_STATE_STOPPING;
+                break;
+            case SessionState::EXITING:
+                stateEvent->state = XR_SESSION_STATE_EXITING;
+                break;
+            default:
+                stateEvent->state = XR_SESSION_STATE_UNKNOWN;
+                break;
+        }
 
-    if (!focusedSent) {
-        XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
-        stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
-        stateEvent->next = nullptr;
-        stateEvent->session = (XrSession)1;
-        stateEvent->state = XR_SESSION_STATE_FOCUSED;
-        stateEvent->time = 0;
-        focusedSent = true;
-        LOG_INFO("Session state: FOCUSED");
+        LOG_INFO("Session state event from service");
         return XR_SUCCESS;
     }
 
@@ -394,13 +396,15 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetSystemProperties(XrInstance instance, XrSyst
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
+    // Get system properties from cached metadata
+    auto& sys_props = ServiceConnection::Instance().GetSystemProperties();
     properties->systemId = systemId;
-    safe_copy_string(properties->systemName, XR_MAX_SYSTEM_NAME_SIZE, "ox Virtual HMD");
-    properties->graphicsProperties.maxSwapchainImageWidth = 2048;
-    properties->graphicsProperties.maxSwapchainImageHeight = 2048;
-    properties->graphicsProperties.maxLayerCount = 16;
-    properties->trackingProperties.orientationTracking = XR_TRUE;
-    properties->trackingProperties.positionTracking = XR_TRUE;
+    safe_copy_string(properties->systemName, XR_MAX_SYSTEM_NAME_SIZE, sys_props.system_name);
+    properties->graphicsProperties.maxSwapchainImageWidth = sys_props.max_swapchain_width;
+    properties->graphicsProperties.maxSwapchainImageHeight = sys_props.max_swapchain_height;
+    properties->graphicsProperties.maxLayerCount = sys_props.max_layer_count;
+    properties->trackingProperties.orientationTracking = sys_props.orientation_tracking;
+    properties->trackingProperties.positionTracking = sys_props.position_tracking;
 
     return XR_SUCCESS;
 }
@@ -448,14 +452,19 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurationViews(XrInstance inst
     }
 
     if (viewCapacityInput > 0 && views) {
+        // Get view configurations from cached metadata
+        auto& view_configs = ServiceConnection::Instance().GetViewConfigurations();
+
         for (uint32_t i = 0; i < 2 && i < viewCapacityInput; i++) {
             views[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
-            views[i].recommendedImageRectWidth = 1024;
-            views[i].maxImageRectWidth = 2048;
-            views[i].recommendedImageRectHeight = 1024;
-            views[i].maxImageRectHeight = 2048;
-            views[i].recommendedSwapchainSampleCount = 1;
-            views[i].maxSwapchainSampleCount = 4;
+
+            auto& config = view_configs.views[i];
+            views[i].recommendedImageRectWidth = config.recommended_width;
+            views[i].maxImageRectWidth = config.recommended_width * 2;
+            views[i].recommendedImageRectHeight = config.recommended_height;
+            views[i].maxImageRectHeight = config.recommended_height * 2;
+            views[i].recommendedSwapchainSampleCount = config.recommended_sample_count;
+            views[i].maxSwapchainSampleCount = config.max_sample_count;
         }
     }
 
@@ -487,11 +496,28 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    // Send message to service
+    // Service will create session and return handle via CREATE_SESSION message
     ServiceConnection::Instance().SendRequest(MessageType::CREATE_SESSION);
 
+    // The service returns the session handle in the response, but for now
+    // we'll get it from shared memory after the state transitions
+    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    if (!shared_data) {
+        LOG_ERROR("xrCreateSession: No service connection");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+
+    // Wait briefly for service to set the session handle
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    uint64_t handle = shared_data->active_session_handle.load(std::memory_order_acquire);
+
+    if (handle == 0) {
+        LOG_ERROR("xrCreateSession: Service did not create session");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    XrSession newSession = createHandle<XrSession>();
+    XrSession newSession = (XrSession)(uintptr_t)handle;
     g_sessions[newSession] = instance;
     *session = newSession;
 
@@ -554,7 +580,12 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session, const X
     }
 
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    XrSpace newSpace = createHandle<XrSpace>();
+    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SPACE);
+    if (handle == 0) {
+        LOG_ERROR("Failed to allocate space handle from service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+    XrSpace newSpace = (XrSpace)(uintptr_t)handle;
     g_spaces[newSpace] = session;
     *space = newSpace;
 
@@ -672,7 +703,12 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance, const XrAc
     if (!createInfo || !actionSet) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    *actionSet = createHandle<XrActionSet>();
+    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::ACTION_SET);
+    if (handle == 0) {
+        LOG_ERROR("Failed to allocate action set handle from service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+    *actionSet = (XrActionSet)(uintptr_t)handle;
     return XR_SUCCESS;
 }
 
@@ -687,7 +723,12 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrAct
     if (!createInfo || !action) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    *action = createHandle<XrAction>();
+    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::ACTION);
+    if (handle == 0) {
+        LOG_ERROR("Failed to allocate action handle from service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+    *action = (XrAction)(uintptr_t)handle;
     return XR_SUCCESS;
 }
 
@@ -799,7 +840,12 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
     if (!createInfo || !swapchain) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    *swapchain = createHandle<XrSwapchain>();
+    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SWAPCHAIN);
+    if (handle == 0) {
+        LOG_ERROR("Failed to allocate swapchain handle from service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+    *swapchain = (XrSwapchain)(uintptr_t)handle;
     return XR_SUCCESS;
 }
 

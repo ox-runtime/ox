@@ -22,7 +22,7 @@ namespace ox {
 namespace protocol {
 
 // Protocol version
-static constexpr uint32_t PROTOCOL_VERSION = 1;
+static constexpr uint32_t PROTOCOL_VERSION = 2;
 
 // Message types for control channel
 enum class MessageType : uint32_t {
@@ -33,7 +33,34 @@ enum class MessageType : uint32_t {
     BEGIN_FRAME = 5,
     END_FRAME = 6,
     SHARE_GRAPHICS_HANDLE = 7,
+    ALLOCATE_HANDLE = 8,
+    GET_NEXT_EVENT = 9,
+    GET_RUNTIME_PROPERTIES = 10,
+    GET_SYSTEM_PROPERTIES = 11,
+    GET_VIEW_CONFIGURATIONS = 12,
     RESPONSE = 100,
+};
+
+// OpenXR handle types
+enum class HandleType : uint32_t {
+    INSTANCE = 1,
+    SESSION = 2,
+    SPACE = 3,
+    ACTION_SET = 4,
+    ACTION = 5,
+    SWAPCHAIN = 6,
+};
+
+// Session states
+enum class SessionState : uint32_t {
+    UNKNOWN = 0,
+    IDLE = 1,
+    READY = 2,
+    SYNCHRONIZED = 3,
+    VISIBLE = 4,
+    FOCUSED = 5,
+    STOPPING = 6,
+    EXITING = 7,
 };
 
 // Status codes for protocol messages
@@ -49,6 +76,49 @@ struct MessageHeader {
     uint32_t sequence;
     uint32_t payload_size;
     uint32_t reserved;
+};
+
+// Message payloads
+struct AllocateHandleRequest {
+    HandleType handle_type;
+};
+
+struct AllocateHandleResponse {
+    uint64_t handle;
+};
+
+struct SessionStateEvent {
+    uint64_t session_handle;
+    SessionState state;
+    uint64_t timestamp;
+};
+
+// Response payloads for static metadata queries (via control channel)
+struct RuntimePropertiesResponse {
+    char runtime_name[128];
+    uint32_t runtime_version_major;
+    uint32_t runtime_version_minor;
+    uint32_t runtime_version_patch;
+    uint32_t padding;
+};
+
+struct SystemPropertiesResponse {
+    char system_name[256];
+    uint32_t max_swapchain_width;
+    uint32_t max_swapchain_height;
+    uint32_t max_layer_count;
+    uint32_t orientation_tracking;
+    uint32_t position_tracking;
+    uint32_t padding[2];
+};
+
+struct ViewConfigurationsResponse {
+    struct ViewConfig {
+        uint32_t recommended_width;
+        uint32_t recommended_height;
+        uint32_t recommended_sample_count;
+        uint32_t max_sample_count;
+    } views[2];  // Stereo
 };
 
 // Pose data (hot path - shared memory)
@@ -83,16 +153,21 @@ struct ALIGN_64 FrameState {
 #endif
 };
 
-// Shared memory layout
+// Shared memory layout (only dynamic data - hot path optimized)
 struct ALIGN_4096 SharedData {
     std::atomic<uint32_t> protocol_version;
     std::atomic<uint32_t> service_ready;
     std::atomic<uint32_t> client_connected;
     uint32_t padding1;
 
+    // Session state (dynamic)
+    std::atomic<uint32_t> session_state;  // SessionState enum
+    std::atomic<uint64_t> active_session_handle;
+
+    // Frame state (hot path - 90Hz updates)
     FrameState frame_state;
 
-    uint8_t reserved[3584];  // Pad to 4KB
+    uint8_t reserved[3568];  // Pad to 4KB
 };
 
 static_assert(sizeof(SharedData) <= 4096, "SharedData must fit in 4KB page");

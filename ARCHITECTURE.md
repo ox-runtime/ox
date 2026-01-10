@@ -31,28 +31,51 @@ Zero-overhead IPC layer designed for sub-microsecond latency:
 
 ### 2. Client Library (`src/client/`)
 
-Thin DLL that implements the OpenXR API:
+**Thin DLL** that implements the OpenXR API (thin wrapper only):
 
 - **`runtime.cpp`**: OpenXR API implementation
-  - All `xr*` functions
+  - All `xr*` functions (API surface only)
   - Function dispatch table
-  - Minimal overhead wrapper
+  - **Minimal business logic** - delegates to service
+  - Parameter validation only
 
 - **`service_connection.cpp`**: Service connection management
   - Connects to running service
   - Maintains connection to shared memory
   - Handles control message exchange with service
+  - **Handle allocation requests**
+  - **Event polling from service**
+  - **Caches static metadata** (runtime/system properties, view configs)
+
+**Client responsibilities (minimal):**
+- Implement OpenXR API surface
+- Validate input parameters
+- Forward requests to service via control channel
+- Read tracking data from shared memory (hot path)
+- Map service handles to OpenXR handles
 
 ### 3. Service Process (`src/service/`)
 
-Independent background process:
+Independent background process **(owns all business logic)**:
 
 - **`main.cpp`**: Service implementation
-  - Runs at approximately 90Hz generating mock tracking data
+  - **Handle allocation and lifecycle management**
+  - **Runtime and system property ownership**
+  - **Session state machine management**
+  - **Event queue management**
+  - Runs at approximately 90Hz generating tracking data
   - Maintains shared memory state
   - Supports multiple client connections sequentially
-  - Handles control messages for session lifecycle
   - Future: compositor, lens distortion, hardware I/O
+
+**Service responsibilities (comprehensive):**
+- Allocate all OpenXR object handles (instances, sessions, spaces, actions, swapchains)
+- Own runtime metadata (name, version)
+- Own system properties (HMD capabilities, tracking, display specs)
+- Manage session state transitions (IDLE → READY → SYNCHRONIZED → FOCUSED)
+- Queue and deliver state change events
+- Generate tracking data (90Hz loop)
+- Future: hardware I/O, compositor, distortion correction
 
 ## Data Flow
 
@@ -76,6 +99,15 @@ Client ← Named Pipe/Socket ← Service
 
 **Latency**: Sub-millisecond (adequate for lifecycle events)
 
+**Control message types:**
+- `CONNECT` / `DISCONNECT`: Client lifecycle
+- `CREATE_SESSION` / `DESTROY_SESSION`: Session management (service allocates handle)
+- `ALLOCATE_HANDLE`: Request handle for Instance, Space, Action, ActionSet, Swapchain
+- `GET_NEXT_EVENT`: Poll for session state change events
+- `GET_RUNTIME_PROPERTIES`: Query runtime name/version (cached by client)
+- `GET_SYSTEM_PROPERTIES`: Query HMD capabilities (cached by client)
+- `GET_VIEW_CONFIGURATIONS`: Query recommended resolutions/FOV (cached by client)
+
 ## Shared Memory Layout
 
 ```c++
@@ -83,7 +115,11 @@ struct SharedData {
     atomic<uint32_t> protocol_version;  // Protocol versioning
     atomic<uint32_t> service_ready;     // Service state
     atomic<uint32_t> client_connected;  // Client state
-    
+
+    // Session state (dynamic)
+    atomic<uint32_t> session_state;        // SessionState enum
+    atomic<uint64_t> active_session_handle;
+
     FrameState frame_state;             // HOT: 90Hz updates
     // Contains:
     //   - frame_id (atomic)
@@ -95,6 +131,8 @@ struct SharedData {
 ```
 
 **Total size**: 4KB (fits in single memory page)
+
+**Note**: Static metadata (runtime name/version, system properties, view configurations) are **NOT** in shared memory. They are queried once via control channel during `Connect()` and cached by the client. This keeps shared memory optimized for hot-path dynamic data only.
 
 ## Platform Compatibility
 
@@ -135,7 +173,8 @@ struct SharedData {
 4. Client connects to control channel (~1ms)
 5. Verifies protocol version
 6. Sends CONNECT message to service
-7. Ready to render
+7. Queries and caches static metadata (runtime properties, system properties, view configs)
+8. Ready to render
 
 ## Future Enhancements
 

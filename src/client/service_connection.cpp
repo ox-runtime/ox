@@ -46,6 +46,12 @@ bool ServiceConnection::Connect() {
         return false;
     }
 
+    // Query static metadata (cached for the session)
+    if (!QueryStaticMetadata()) {
+        LOG_ERROR("Failed to query static metadata from service");
+        return false;
+    }
+
     connected_ = true;
     shared_data_->client_connected.store(1, std::memory_order_release);
 
@@ -92,6 +98,141 @@ bool ServiceConnection::SendRequest(protocol::MessageType type, const void* payl
     }
 
     return response.type == protocol::MessageType::RESPONSE;
+}
+
+uint64_t ServiceConnection::AllocateHandle(protocol::HandleType type) {
+    std::lock_guard<std::mutex> lock(send_mutex_);
+
+    protocol::AllocateHandleRequest request;
+    request.handle_type = type;
+
+    protocol::MessageHeader header;
+    header.type = protocol::MessageType::ALLOCATE_HANDLE;
+    header.sequence = sequence_++;
+    header.payload_size = sizeof(request);
+
+    if (!control_.Send(header, &request)) {
+        return 0;
+    }
+
+    // Wait for response
+    protocol::MessageHeader response;
+    std::vector<uint8_t> response_payload;
+
+    if (!control_.Receive(response, response_payload)) {
+        return 0;
+    }
+
+    if (response.type == protocol::MessageType::RESPONSE &&
+        response_payload.size() >= sizeof(protocol::AllocateHandleResponse)) {
+        const protocol::AllocateHandleResponse* resp =
+            reinterpret_cast<const protocol::AllocateHandleResponse*>(response_payload.data());
+        return resp->handle;
+    }
+
+    return 0;
+}
+
+bool ServiceConnection::GetNextEvent(protocol::SessionStateEvent& event) {
+    std::lock_guard<std::mutex> lock(send_mutex_);
+
+    protocol::MessageHeader request;
+    request.type = protocol::MessageType::GET_NEXT_EVENT;
+    request.sequence = sequence_++;
+    request.payload_size = 0;
+
+    if (!control_.Send(request)) {
+        return false;
+    }
+
+    // Wait for response
+    protocol::MessageHeader response;
+    std::vector<uint8_t> response_payload;
+
+    if (!control_.Receive(response, response_payload)) {
+        return false;
+    }
+
+    if (response.type == protocol::MessageType::RESPONSE &&
+        response_payload.size() >= sizeof(protocol::SessionStateEvent)) {
+        std::memcpy(&event, response_payload.data(), sizeof(event));
+        return true;
+    }
+
+    return false;
+}
+
+bool ServiceConnection::QueryStaticMetadata() {
+    std::lock_guard<std::mutex> lock(send_mutex_);
+
+    // Query runtime properties
+    {
+        protocol::MessageHeader request;
+        request.type = protocol::MessageType::GET_RUNTIME_PROPERTIES;
+        request.sequence = sequence_++;
+        request.payload_size = 0;
+
+        if (!control_.Send(request)) {
+            return false;
+        }
+
+        protocol::MessageHeader response;
+        std::vector<uint8_t> response_payload;
+
+        if (!control_.Receive(response, response_payload) || response.type != protocol::MessageType::RESPONSE ||
+            response_payload.size() < sizeof(protocol::RuntimePropertiesResponse)) {
+            return false;
+        }
+
+        std::memcpy(&runtime_props_, response_payload.data(), sizeof(runtime_props_));
+    }
+
+    // Query system properties
+    {
+        protocol::MessageHeader request;
+        request.type = protocol::MessageType::GET_SYSTEM_PROPERTIES;
+        request.sequence = sequence_++;
+        request.payload_size = 0;
+
+        if (!control_.Send(request)) {
+            return false;
+        }
+
+        protocol::MessageHeader response;
+        std::vector<uint8_t> response_payload;
+
+        if (!control_.Receive(response, response_payload) || response.type != protocol::MessageType::RESPONSE ||
+            response_payload.size() < sizeof(protocol::SystemPropertiesResponse)) {
+            return false;
+        }
+
+        std::memcpy(&system_props_, response_payload.data(), sizeof(system_props_));
+    }
+
+    // Query view configurations
+    {
+        protocol::MessageHeader request;
+        request.type = protocol::MessageType::GET_VIEW_CONFIGURATIONS;
+        request.sequence = sequence_++;
+        request.payload_size = 0;
+
+        if (!control_.Send(request)) {
+            return false;
+        }
+
+        protocol::MessageHeader response;
+        std::vector<uint8_t> response_payload;
+
+        if (!control_.Receive(response, response_payload) || response.type != protocol::MessageType::RESPONSE ||
+            response_payload.size() < sizeof(protocol::ViewConfigurationsResponse)) {
+            return false;
+        }
+
+        std::memcpy(&view_configs_, response_payload.data(), sizeof(view_configs_));
+    }
+
+    LOG_INFO("Successfully queried static metadata from service");
+    return true;
 }
 
 }  // namespace client
