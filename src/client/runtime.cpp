@@ -1237,6 +1237,67 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSpace(XrSession session, const XrAc
     return XR_SUCCESS;
 }
 
+XRAPI_ATTR XrResult XRAPI_CALL xrGetReferenceSpaceBoundsRect(XrSession session, XrReferenceSpaceType referenceSpaceType,
+                                                             XrExtent2Df* bounds) {
+    LOG_DEBUG("xrGetReferenceSpaceBoundsRect called");
+    if (!bounds) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    // Return failure to indicate bounds are not available
+    return XR_SPACE_BOUNDS_UNAVAILABLE;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL
+xrEnumerateBoundSourcesForAction(XrSession session, const XrBoundSourcesForActionEnumerateInfo* enumerateInfo,
+                                 uint32_t sourceCapacityInput, uint32_t* sourceCountOutput, XrPath* sources) {
+    LOG_DEBUG("xrEnumerateBoundSourcesForAction called");
+    if (!enumerateInfo) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    if (sourceCountOutput) {
+        *sourceCountOutput = 0;
+    }
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetInputSourceLocalizedName(XrSession session,
+                                                             const XrInputSourceLocalizedNameGetInfo* getInfo,
+                                                             uint32_t bufferCapacityInput, uint32_t* bufferCountOutput,
+                                                             char* buffer) {
+    LOG_DEBUG("xrGetInputSourceLocalizedName called");
+    if (!getInfo) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    const char* name = "Unknown";
+    uint32_t len = strlen(name) + 1;
+    if (bufferCountOutput) {
+        *bufferCountOutput = len;
+    }
+    if (bufferCapacityInput > 0 && buffer) {
+        safe_copy_string(buffer, bufferCapacityInput, name);
+    }
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrApplyHapticFeedback(XrSession session, const XrHapticActionInfo* hapticActionInfo,
+                                                     const XrHapticBaseHeader* hapticFeedback) {
+    LOG_DEBUG("xrApplyHapticFeedback called");
+    if (!hapticActionInfo || !hapticFeedback) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    // Haptic feedback not implemented yet
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrStopHapticFeedback(XrSession session, const XrHapticActionInfo* hapticActionInfo) {
+    LOG_DEBUG("xrStopHapticFeedback called");
+    if (!hapticActionInfo) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    // Haptic feedback not implemented yet
+    return XR_SUCCESS;
+}
+
 // Swapchain functions
 XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, uint32_t formatCapacityInput,
                                                            uint32_t* formatCountOutput, int64_t* formats) {
@@ -1487,6 +1548,11 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrGetActionStateVector2f"] = (PFN_xrVoidFunction)xrGetActionStateVector2f;
     g_clientFunctionMap["xrGetActionStatePose"] = (PFN_xrVoidFunction)xrGetActionStatePose;
     g_clientFunctionMap["xrCreateActionSpace"] = (PFN_xrVoidFunction)xrCreateActionSpace;
+    g_clientFunctionMap["xrGetReferenceSpaceBoundsRect"] = (PFN_xrVoidFunction)xrGetReferenceSpaceBoundsRect;
+    g_clientFunctionMap["xrEnumerateBoundSourcesForAction"] = (PFN_xrVoidFunction)xrEnumerateBoundSourcesForAction;
+    g_clientFunctionMap["xrGetInputSourceLocalizedName"] = (PFN_xrVoidFunction)xrGetInputSourceLocalizedName;
+    g_clientFunctionMap["xrApplyHapticFeedback"] = (PFN_xrVoidFunction)xrApplyHapticFeedback;
+    g_clientFunctionMap["xrStopHapticFeedback"] = (PFN_xrVoidFunction)xrStopHapticFeedback;
     g_clientFunctionMap["xrEnumerateSwapchainFormats"] = (PFN_xrVoidFunction)xrEnumerateSwapchainFormats;
     g_clientFunctionMap["xrCreateSwapchain"] = (PFN_xrVoidFunction)xrCreateSwapchain;
     g_clientFunctionMap["xrDestroySwapchain"] = (PFN_xrVoidFunction)xrDestroySwapchain;
@@ -1507,6 +1573,8 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const 
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
+    LOG_DEBUG(("xrGetInstanceProcAddr called for: " + std::string(name)).c_str());
+
     if (g_clientFunctionMap.empty()) {
         InitializeFunctionMap();
     }
@@ -1517,6 +1585,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const 
         return XR_SUCCESS;
     }
 
+    LOG_ERROR(("xrGetInstanceProcAddr: Function NOT FOUND: " + std::string(name)).c_str());
     *function = nullptr;
     return XR_ERROR_FUNCTION_UNSUPPORTED;
 }
