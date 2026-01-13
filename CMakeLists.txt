@@ -66,6 +66,10 @@ target_include_directories(ox PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+# Link OpenGL library for graphics support
+find_package(OpenGL REQUIRED)
+target_link_libraries(ox PRIVATE OpenGL::GL)
+
 # Set output directory to build/bin (disable per-config subdirectories)
 set_target_properties(ox PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin

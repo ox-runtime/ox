@@ -14,6 +14,13 @@
 #include <openxr/openxr_loader_negotiation.h>
 #include <openxr/openxr_platform.h>
 
+// Include OpenGL for texture creation
+#ifdef _WIN32
+#include <GL/gl.h>
+#else
+#include <GL/gl.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -42,6 +49,16 @@ using namespace ox::protocol;
 static std::unordered_map<XrInstance, bool> g_instances;
 static std::unordered_map<XrSession, XrInstance> g_sessions;
 static std::unordered_map<XrSpace, XrSession> g_spaces;
+
+// Swapchain image data
+struct SwapchainData {
+    std::vector<uint32_t> textureIds;  // OpenGL texture IDs
+    uint32_t width;
+    uint32_t height;
+    int64_t format;
+    bool texturesCreated;
+};
+static std::unordered_map<XrSwapchain, SwapchainData> g_swapchains;
 
 // Action space metadata
 struct ActionSpaceData {
@@ -528,6 +545,26 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
+    // Check for graphics binding in the next chain (required for rendering)
+    const void* next = createInfo->next;
+    bool hasGraphicsBinding = false;
+    while (next) {
+        const XrBaseInStructure* header = reinterpret_cast<const XrBaseInStructure*>(next);
+        if (header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR ||
+            header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR ||
+            header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_XCB_KHR ||
+            header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR) {
+            hasGraphicsBinding = true;
+            LOG_DEBUG("xrCreateSession: OpenGL graphics binding detected");
+            break;
+        }
+        next = header->next;
+    }
+
+    if (hasGraphicsBinding) {
+        LOG_INFO("Session created with graphics binding (rendering not implemented yet)");
+    }
+
     // Service will create session and return handle via CREATE_SESSION message
     ServiceConnection::Instance().SendRequest(MessageType::CREATE_SESSION);
 
@@ -730,6 +767,16 @@ XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const XrFrameBegi
 
 XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInfo* frameEndInfo) {
     LOG_DEBUG("xrEndFrame called");
+    if (!frameEndInfo) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    // We're not rendering anything to the device yet, but we need to safely
+    // handle the layer information to prevent crashes
+    if (frameEndInfo->layerCount > 0 && frameEndInfo->layers) {
+        LOG_DEBUG("xrEndFrame: Received layers (ignoring for now)");
+    }
+
     return XR_SUCCESS;
 }
 
@@ -1216,17 +1263,40 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
     if (!createInfo || !swapchain) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
+
     uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SWAPCHAIN);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate swapchain handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
     *swapchain = (XrSwapchain)(uintptr_t)handle;
+
+    // Store swapchain data for later texture creation
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    SwapchainData data;
+    data.width = createInfo->width;
+    data.height = createInfo->height;
+    data.format = createInfo->format;
+    data.texturesCreated = false;
+    g_swapchains[*swapchain] = data;
+
+    LOG_DEBUG("Swapchain created successfully");
     return XR_SUCCESS;
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
     LOG_DEBUG("xrDestroySwapchain called");
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    auto it = g_swapchains.find(swapchain);
+    if (it != g_swapchains.end()) {
+        // Delete OpenGL textures if they were created
+        if (it->second.texturesCreated && !it->second.textureIds.empty()) {
+            glDeleteTextures(static_cast<GLsizei>(it->second.textureIds.size()), it->second.textureIds.data());
+        }
+        g_swapchains.erase(it);
+    }
+
     return XR_SUCCESS;
 }
 
@@ -1241,9 +1311,55 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
     }
 
     if (imageCapacityInput > 0 && images) {
-        for (uint32_t i = 0; i < imageCapacityInput && i < numImages; i++) {
-            images[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR;
-            images[i].next = nullptr;
+        // Get or create textures for this swapchain
+        std::lock_guard<std::mutex> lock(g_instance_mutex);
+        auto it = g_swapchains.find(swapchain);
+
+        // Determine if this API type needs OpenGL textures
+        // Note: XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR = 1000024002
+        //       XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR = 1000023000
+        // Both have the same memory layout (type, next, image) so we can handle them the same way
+        XrStructureType imageType = images[0].type;
+        bool needsTextures = (imageType == XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR ||
+                              imageType == static_cast<XrStructureType>(1000024002));  // OPENGL_ES_KHR
+
+        if (it != g_swapchains.end() && needsTextures && !it->second.texturesCreated) {
+            // Create OpenGL textures on first enumeration
+            it->second.textureIds.resize(numImages);
+            glGenTextures(numImages, it->second.textureIds.data());
+
+            // Initialize each texture with minimal settings
+            for (uint32_t i = 0; i < numImages; i++) {
+                glBindTexture(GL_TEXTURE_2D, it->second.textureIds[i]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, it->second.width, it->second.height, 0, GL_RGBA,
+                             GL_UNSIGNED_BYTE, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            }
+            glBindTexture(GL_TEXTURE_2D, 0);
+            it->second.texturesCreated = true;
+        }
+
+        // Populate the image array
+        // Both OpenGL and OpenGL ES use the same structure layout
+        if (needsTextures) {
+            // Cast to OpenGL structure (works for both GL and GLES)
+            XrSwapchainImageOpenGLKHR* glImages = reinterpret_cast<XrSwapchainImageOpenGLKHR*>(images);
+            for (uint32_t i = 0; i < imageCapacityInput && i < numImages; i++) {
+                glImages[i].type = imageType;  // Preserve the original type
+                glImages[i].next = nullptr;
+                if (it != g_swapchains.end() && i < it->second.textureIds.size()) {
+                    glImages[i].image = it->second.textureIds[i];
+                } else {
+                    glImages[i].image = 0;
+                }
+            }
+        } else {
+            // For other graphics APIs (Vulkan, D3D, etc.), just set the base header
+            for (uint32_t i = 0; i < imageCapacityInput && i < numImages; i++) {
+                images[i].type = imageType;
+                images[i].next = nullptr;
+            }
         }
     }
 
