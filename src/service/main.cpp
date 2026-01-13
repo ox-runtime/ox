@@ -293,6 +293,9 @@ class OxService {
                 case MessageType::GET_INTERACTION_PROFILES:
                     HandleGetInteractionProfiles(header);
                     break;
+                case MessageType::GET_INPUT_COMPONENT_STATE:
+                    HandleGetInputComponentState(header, payload);
+                    break;
                 default:
                     LOG_ERROR("Unknown message type");
                     break;
@@ -442,6 +445,29 @@ class OxService {
         response.payload_size = sizeof(profiles_response);
         control_.Send(response, &profiles_response);
         LOG_DEBUG("Sent interaction profiles");
+    }
+
+    void HandleGetInputComponentState(const MessageHeader& request, const std::vector<uint8_t>& payload) {
+        if (payload.size() < sizeof(InputComponentStateRequest)) {
+            LOG_ERROR("Invalid input component state request");
+            return;
+        }
+
+        const InputComponentStateRequest* component_request =
+            reinterpret_cast<const InputComponentStateRequest*>(payload.data());
+
+        InputComponentStateResponse component_response = {};
+        component_response.is_available = driver_.GetInputComponentState(
+            component_request->predicted_time, component_request->controller_index, component_request->component_path,
+            &component_response.boolean_value, &component_response.float_value, &component_response.x,
+            &component_response.y);
+
+        MessageHeader response;
+        response.type = MessageType::RESPONSE;
+        response.sequence = request.sequence;
+        response.payload_size = sizeof(component_response);
+        control_.Send(response, &component_response);
+        LOG_DEBUG("Sent input component state");
     }
 
     void FrameLoop() {

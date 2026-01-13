@@ -80,6 +80,25 @@ typedef struct {
     OxPose pose;
 } OxControllerState;
 
+// Component state result codes
+typedef enum {
+    OX_COMPONENT_UNAVAILABLE = 0,  // Component doesn't exist on this controller
+    OX_COMPONENT_AVAILABLE = 1,    // Component exists and state is valid
+} OxComponentResult;
+
+// Input component state - generic for all component types
+typedef struct {
+    // Boolean state (for /click, /touch components)
+    uint32_t boolean_value;  // 0 or 1
+
+    // Float state (for /value, /force components)
+    float float_value;  // 0.0 to 1.0
+
+    // Vector2 state (for thumbstick/trackpad x/y)
+    float x;  // -1.0 to 1.0
+    float y;  // -1.0 to 1.0
+} OxInputComponentState;
+
 // Driver callbacks - implement these in your driver
 struct OxDriverCallbacks {
     // ========== Lifecycle ==========
@@ -129,6 +148,27 @@ struct OxDriverCallbacks {
     // out_state: write the controller state here (set is_active=0 if not connected)
     // This callback is optional - set to NULL if controllers are not supported
     void (*update_controller_state)(int64_t predicted_time, uint32_t controller_index, OxControllerState* out_state);
+
+    // Get input component state by path
+    // predicted_time: nanoseconds since epoch
+    // controller_index: OX_CONTROLLER_LEFT or OX_CONTROLLER_RIGHT
+    // component_path: OpenXR component path (e.g., "/input/trigger/value", "/input/a/click", "/input/thumbstick")
+    // out_state: write the component state here
+    // Returns: OX_COMPONENT_AVAILABLE if component exists, OX_COMPONENT_UNAVAILABLE otherwise
+    //
+    // Example component paths:
+    //   "/input/trigger/value"      -> float_value (0.0 to 1.0)
+    //   "/input/trigger/click"      -> boolean_value (0 or 1)
+    //   "/input/a/click"            -> boolean_value
+    //   "/input/a/touch"            -> boolean_value
+    //   "/input/squeeze/value"      -> float_value
+    //   "/input/thumbstick"         -> x, y (-1.0 to 1.0)
+    //   "/input/thumbstick/x"       -> float_value (-1.0 to 1.0)
+    //   "/input/thumbstick/click"   -> boolean_value
+    //
+    // This callback is optional - set to NULL if controllers are not supported
+    OxComponentResult (*get_input_component_state)(int64_t predicted_time, uint32_t controller_index,
+                                                   const char* component_path, OxInputComponentState* out_state);
 
     // ========== Interaction Profiles (Optional) ==========
 

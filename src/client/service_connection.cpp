@@ -1,6 +1,7 @@
 #include "service_connection.h"
 
 #include <chrono>
+#include <cstring>
 #include <sstream>
 #include <thread>
 
@@ -255,6 +256,49 @@ bool ServiceConnection::QueryStaticMetadata() {
 
     LOG_INFO("Successfully queried static metadata from service");
     return true;
+}
+
+bool ServiceConnection::GetInputComponentState(uint32_t controller_index, const char* component_path,
+                                               int64_t predicted_time,
+                                               protocol::InputComponentStateResponse& out_response) {
+    std::lock_guard<std::mutex> lock(send_mutex_);
+
+    protocol::InputComponentStateRequest request;
+    request.controller_index = controller_index;
+    request.predicted_time = predicted_time;
+
+    // Copy component path safely
+    size_t path_len = std::strlen(component_path);
+    if (path_len >= sizeof(request.component_path)) {
+        LOG_ERROR("Component path too long");
+        return false;
+    }
+    std::strcpy(request.component_path, component_path);
+
+    protocol::MessageHeader header;
+    header.type = protocol::MessageType::GET_INPUT_COMPONENT_STATE;
+    header.sequence = sequence_++;
+    header.payload_size = sizeof(request);
+
+    if (!control_.Send(header, &request)) {
+        return false;
+    }
+
+    // Wait for response
+    protocol::MessageHeader response;
+    std::vector<uint8_t> response_payload;
+
+    if (!control_.Receive(response, response_payload)) {
+        return false;
+    }
+
+    if (response.type == protocol::MessageType::RESPONSE &&
+        response_payload.size() >= sizeof(protocol::InputComponentStateResponse)) {
+        std::memcpy(&out_response, response_payload.data(), sizeof(out_response));
+        return true;
+    }
+
+    return false;
 }
 
 }  // namespace client

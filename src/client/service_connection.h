@@ -40,6 +40,10 @@ class ServiceConnection {
     const protocol::ViewConfigurationsResponse& GetViewConfigurations() const { return view_configs_; }
     const protocol::InteractionProfilesResponse& GetInteractionProfiles() const { return interaction_profiles_; }
 
+    // Query input component state from driver
+    bool GetInputComponentState(uint32_t controller_index, const char* component_path, int64_t predicted_time,
+                                protocol::InputComponentStateResponse& out_response);
+
    private:
     ServiceConnection() : shared_data_(nullptr), connected_(false), sequence_(0) {}
     ~ServiceConnection() { Disconnect(); }

@@ -39,6 +39,7 @@ enum class MessageType : uint32_t {
     GET_SYSTEM_PROPERTIES = 11,
     GET_VIEW_CONFIGURATIONS = 12,
     GET_INTERACTION_PROFILES = 13,
+    GET_INPUT_COMPONENT_STATE = 14,
     RESPONSE = 100,
 };
 
@@ -125,6 +126,20 @@ struct ViewConfigurationsResponse {
 struct InteractionProfilesResponse {
     uint32_t profile_count;
     char profiles[8][128];  // Up to 8 interaction profile paths
+};
+
+struct InputComponentStateRequest {
+    uint32_t controller_index;  // 0 = left, 1 = right
+    char component_path[128];   // e.g., "/input/trigger/value"
+    int64_t predicted_time;
+};
+
+struct InputComponentStateResponse {
+    uint32_t is_available;  // 0 = unavailable, 1 = available
+    uint32_t boolean_value;
+    float float_value;
+    float x;
+    float y;
 };
 
 // Pose data (hot path - shared memory)

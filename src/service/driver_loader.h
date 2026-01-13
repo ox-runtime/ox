@@ -173,6 +173,23 @@ class DriverLoader {
         return profiles;
     }
 
+    uint32_t GetInputComponentState(int64_t predicted_time, uint32_t controller_index, const char* component_path,
+                                    uint32_t* boolean_value, float* float_value, float* x, float* y) const {
+        if (loaded_ && callbacks_.get_input_component_state) {
+            OxInputComponentState state = {};
+            OxComponentResult result =
+                callbacks_.get_input_component_state(predicted_time, controller_index, component_path, &state);
+            if (result == OX_COMPONENT_AVAILABLE) {
+                *boolean_value = state.boolean_value;
+                *float_value = state.float_value;
+                *x = state.x;
+                *y = state.y;
+                return 1;
+            }
+        }
+        return 0;
+    }
+
     bool IsLoaded() const { return loaded_; }
 
    private:

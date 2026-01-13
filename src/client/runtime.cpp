@@ -50,6 +50,26 @@ struct ActionSpaceData {
 };
 static std::unordered_map<XrSpace, ActionSpaceData> g_action_spaces;
 
+// Action metadata
+struct ActionData {
+    XrActionType type;
+    XrActionSet action_set;
+    std::string name;
+    std::vector<XrPath> subaction_paths;
+};
+static std::unordered_map<XrAction, ActionData> g_actions;
+
+// Path tracking - bidirectional mapping between paths and strings
+static std::unordered_map<XrPath, std::string> g_path_to_string;
+static std::unordered_map<std::string, XrPath> g_string_to_path;
+
+// Action binding metadata - maps binding path to action
+struct BindingData {
+    XrAction action;
+    XrPath subaction_path;  // Which hand (left/right) or XR_NULL_PATH for no subaction
+};
+static std::unordered_map<XrPath, BindingData> g_bindings;
+
 // Interaction profile tracking
 static XrPath g_current_interaction_profile = XR_NULL_PATH;
 static std::vector<std::string> g_suggested_profiles;
@@ -792,6 +812,18 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrAct
         return XR_ERROR_RUNTIME_FAILURE;
     }
     *action = (XrAction)(uintptr_t)handle;
+
+    // Store action metadata
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    ActionData& data = g_actions[*action];
+    data.type = createInfo->actionType;
+    data.action_set = actionSet;
+    data.name = createInfo->actionName;
+    if (createInfo->countSubactionPaths > 0 && createInfo->subactionPaths) {
+        data.subaction_paths.assign(createInfo->subactionPaths,
+                                    createInfo->subactionPaths + createInfo->countSubactionPaths);
+    }
+
     return XR_SUCCESS;
 }
 
@@ -820,6 +852,37 @@ XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
             g_suggested_profiles.end()) {
             g_suggested_profiles.push_back(profile_str);
             LOG_DEBUG(("Suggested profile: " + profile_str).c_str());
+        }
+
+        // Store the bindings for this profile
+        for (uint32_t i = 0; i < suggestedBindings->countSuggestedBindings; i++) {
+            const XrActionSuggestedBinding& binding = suggestedBindings->suggestedBindings[i];
+            XrPath binding_path = binding.binding;
+
+            // Find the subaction path from the action metadata
+            XrPath subaction_path = XR_NULL_PATH;
+            auto action_it = g_actions.find(binding.action);
+            if (action_it != g_actions.end()) {
+                // For actions with subaction paths, we need to extract it from the binding path
+                // The binding path format is /user/hand/{left|right}/input/...
+                // We'll store all bindings and determine subaction at query time
+                if (!action_it->second.subaction_paths.empty()) {
+                    char binding_path_str[256];
+                    uint32_t len = 0;
+                    xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+                    std::string path_str(binding_path_str);
+                    // Check if path contains /user/hand/left or /user/hand/right
+                    if (path_str.find("/user/hand/left") != std::string::npos) {
+                        subaction_path = action_it->second.subaction_paths[0];  // Assuming first is left
+                    } else if (path_str.find("/user/hand/right") != std::string::npos) {
+                        subaction_path = action_it->second.subaction_paths.size() > 1
+                                             ? action_it->second.subaction_paths[1]
+                                             : action_it->second.subaction_paths[0];
+                    }
+                }
+            }
+
+            g_bindings[binding_path] = BindingData{binding.action, subaction_path};
         }
     }
 
@@ -891,40 +954,203 @@ XRAPI_ATTR XrResult XRAPI_CALL xrSyncActions(XrSession session, const XrActionsS
 XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateBoolean(XrSession session, const XrActionStateGetInfo* getInfo,
                                                        XrActionStateBoolean* state) {
     LOG_DEBUG("xrGetActionStateBoolean called");
-    if (!state) {
+    if (!state || !getInfo) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
+
+    // Initialize to inactive state
     state->currentState = XR_FALSE;
     state->changedSinceLastSync = XR_FALSE;
     state->lastChangeTime = 0;
     state->isActive = XR_FALSE;
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    // Get instance from session
+    auto session_it = g_sessions.find(session);
+    if (session_it == g_sessions.end()) {
+        return XR_ERROR_HANDLE_INVALID;
+    }
+    XrInstance instance = session_it->second;
+
+    // Find the action metadata
+    auto action_it = g_actions.find(getInfo->action);
+    if (action_it == g_actions.end()) {
+        return XR_SUCCESS;  // Action not found, return inactive
+    }
+
+    // Find a binding for this action + subaction path
+    for (const auto& [binding_path, binding_data] : g_bindings) {
+        if (binding_data.action != getInfo->action) {
+            continue;  // Not our action
+        }
+
+        // Check if subaction path matches (or no subaction requested)
+        if (getInfo->subactionPath != XR_NULL_PATH && binding_data.subaction_path != XR_NULL_PATH &&
+            binding_data.subaction_path != getInfo->subactionPath) {
+            continue;  // Wrong subaction (wrong hand)
+        }
+
+        // Convert binding path to string to extract component path
+        char binding_path_str[256];
+        uint32_t len = 0;
+        xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+
+        // Determine controller index from path (/user/hand/left = 0, /user/hand/right = 1)
+        uint32_t controller_index = 0;
+        std::string path_str(binding_path_str);
+        if (path_str.find("/user/hand/right") != std::string::npos) {
+            controller_index = 1;
+        }
+
+        // Query the driver for component state
+        ox::protocol::InputComponentStateResponse response;
+        if (ServiceConnection::Instance().GetInputComponentState(controller_index, binding_path_str, 0, response)) {
+            if (response.is_available) {
+                state->currentState = response.boolean_value ? XR_TRUE : XR_FALSE;
+                state->isActive = XR_TRUE;
+                state->lastChangeTime = 0;  // TODO: track actual change time
+                return XR_SUCCESS;
+            }
+        }
+    }
+
     return XR_SUCCESS;
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateFloat(XrSession session, const XrActionStateGetInfo* getInfo,
                                                      XrActionStateFloat* state) {
     LOG_DEBUG("xrGetActionStateFloat called");
-    if (!state) {
+    if (!state || !getInfo) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
+
+    // Initialize to inactive state
     state->currentState = 0.0f;
     state->changedSinceLastSync = XR_FALSE;
     state->lastChangeTime = 0;
     state->isActive = XR_FALSE;
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    // Get instance from session
+    auto session_it = g_sessions.find(session);
+    if (session_it == g_sessions.end()) {
+        return XR_ERROR_HANDLE_INVALID;
+    }
+    XrInstance instance = session_it->second;
+
+    // Find the action metadata
+    auto action_it = g_actions.find(getInfo->action);
+    if (action_it == g_actions.end()) {
+        return XR_SUCCESS;  // Action not found, return inactive
+    }
+
+    // Find a binding for this action + subaction path
+    for (const auto& [binding_path, binding_data] : g_bindings) {
+        if (binding_data.action != getInfo->action) {
+            continue;  // Not our action
+        }
+
+        // Check if subaction path matches (or no subaction requested)
+        if (getInfo->subactionPath != XR_NULL_PATH && binding_data.subaction_path != XR_NULL_PATH &&
+            binding_data.subaction_path != getInfo->subactionPath) {
+            continue;  // Wrong subaction (wrong hand)
+        }
+
+        // Convert binding path to string to extract component path
+        char binding_path_str[256];
+        uint32_t len = 0;
+        xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+
+        // Determine controller index from path (/user/hand/left = 0, /user/hand/right = 1)
+        uint32_t controller_index = 0;
+        std::string path_str(binding_path_str);
+        if (path_str.find("/user/hand/right") != std::string::npos) {
+            controller_index = 1;
+        }
+
+        // Query the driver for component state
+        ox::protocol::InputComponentStateResponse response;
+        if (ServiceConnection::Instance().GetInputComponentState(controller_index, binding_path_str, 0, response)) {
+            if (response.is_available) {
+                state->currentState = response.float_value;
+                state->isActive = XR_TRUE;
+                state->lastChangeTime = 0;  // TODO: track actual change time
+                return XR_SUCCESS;
+            }
+        }
+    }
+
     return XR_SUCCESS;
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateVector2f(XrSession session, const XrActionStateGetInfo* getInfo,
                                                         XrActionStateVector2f* state) {
     LOG_DEBUG("xrGetActionStateVector2f called");
-    if (!state) {
+    if (!state || !getInfo) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
+
+    // Initialize to inactive state
     state->currentState.x = 0.0f;
     state->currentState.y = 0.0f;
     state->changedSinceLastSync = XR_FALSE;
     state->lastChangeTime = 0;
     state->isActive = XR_FALSE;
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    // Get instance from session
+    auto session_it = g_sessions.find(session);
+    if (session_it == g_sessions.end()) {
+        return XR_ERROR_HANDLE_INVALID;
+    }
+    XrInstance instance = session_it->second;
+
+    // Find the action metadata
+    auto action_it = g_actions.find(getInfo->action);
+    if (action_it == g_actions.end()) {
+        return XR_SUCCESS;  // Action not found, return inactive
+    }
+
+    // Find a binding for this action + subaction path
+    for (const auto& [binding_path, binding_data] : g_bindings) {
+        if (binding_data.action != getInfo->action) {
+            continue;  // Not our action
+        }
+
+        // Check if subaction path matches (or no subaction requested)
+        if (getInfo->subactionPath != XR_NULL_PATH && binding_data.subaction_path != XR_NULL_PATH &&
+            binding_data.subaction_path != getInfo->subactionPath) {
+            continue;  // Wrong subaction (wrong hand)
+        }
+
+        // Convert binding path to string to extract component path
+        char binding_path_str[256];
+        uint32_t len = 0;
+        xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+
+        // Determine controller index from path (/user/hand/left = 0, /user/hand/right = 1)
+        uint32_t controller_index = 0;
+        std::string path_str(binding_path_str);
+        if (path_str.find("/user/hand/right") != std::string::npos) {
+            controller_index = 1;
+        }
+
+        // Query the driver for component state
+        ox::protocol::InputComponentStateResponse response;
+        if (ServiceConnection::Instance().GetInputComponentState(controller_index, binding_path_str, 0, response)) {
+            if (response.is_available) {
+                state->currentState.x = response.x;
+                state->currentState.y = response.y;
+                state->isActive = XR_TRUE;
+                state->lastChangeTime = 0;  // TODO: track actual change time
+                return XR_SUCCESS;
+            }
+        }
+    }
+
     return XR_SUCCESS;
 }
 
@@ -1051,14 +1277,31 @@ XRAPI_ATTR XrResult XRAPI_CALL xrStringToPath(XrInstance instance, const char* p
     if (!pathString || !path) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    *path = (XrPath)std::hash<std::string>{}(pathString);
+
+    // Note: Caller must hold g_instance_mutex
+    // Check if we've already created this path
+    std::string path_str(pathString);
+    auto it = g_string_to_path.find(path_str);
+    if (it != g_string_to_path.end()) {
+        *path = it->second;
+    } else {
+        // Create new path using hash
+        *path = (XrPath)std::hash<std::string>{}(pathString);
+        g_path_to_string[*path] = path_str;
+        g_string_to_path[path_str] = *path;
+    }
+
     return XR_SUCCESS;
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrPathToString(XrInstance instance, XrPath path, uint32_t bufferCapacityInput,
                                               uint32_t* bufferCountOutput, char* buffer) {
     LOG_DEBUG("xrPathToString called");
-    const char* str = "/unknown/path";
+
+    // Note: Caller must hold g_instance_mutex
+    // Look up the path string
+    auto it = g_path_to_string.find(path);
+    const char* str = (it != g_path_to_string.end()) ? it->second.c_str() : "/unknown/path";
     uint32_t len = strlen(str) + 1;
 
     if (bufferCountOutput) {
