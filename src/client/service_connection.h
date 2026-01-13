@@ -38,6 +38,7 @@ class ServiceConnection {
     const protocol::RuntimePropertiesResponse& GetRuntimeProperties() const { return runtime_props_; }
     const protocol::SystemPropertiesResponse& GetSystemProperties() const { return system_props_; }
     const protocol::ViewConfigurationsResponse& GetViewConfigurations() const { return view_configs_; }
+    const protocol::InteractionProfilesResponse& GetInteractionProfiles() const { return interaction_profiles_; }
 
    private:
     ServiceConnection() : shared_data_(nullptr), connected_(false), sequence_(0) {}
@@ -56,6 +57,7 @@ class ServiceConnection {
     protocol::RuntimePropertiesResponse runtime_props_;
     protocol::SystemPropertiesResponse system_props_;
     protocol::ViewConfigurationsResponse view_configs_;
+    protocol::InteractionProfilesResponse interaction_profiles_;
 };
 
 }  // namespace client

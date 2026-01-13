@@ -231,6 +231,28 @@ bool ServiceConnection::QueryStaticMetadata() {
         std::memcpy(&view_configs_, response_payload.data(), sizeof(view_configs_));
     }
 
+    // Query interaction profiles
+    {
+        protocol::MessageHeader request;
+        request.type = protocol::MessageType::GET_INTERACTION_PROFILES;
+        request.sequence = sequence_++;
+        request.payload_size = 0;
+
+        if (!control_.Send(request)) {
+            return false;
+        }
+
+        protocol::MessageHeader response;
+        std::vector<uint8_t> response_payload;
+
+        if (!control_.Receive(response, response_payload) || response.type != protocol::MessageType::RESPONSE ||
+            response_payload.size() < sizeof(protocol::InteractionProfilesResponse)) {
+            return false;
+        }
+
+        std::memcpy(&interaction_profiles_, response_payload.data(), sizeof(interaction_profiles_));
+    }
+
     LOG_INFO("Successfully queried static metadata from service");
     return true;
 }

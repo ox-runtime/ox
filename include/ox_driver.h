@@ -67,6 +67,19 @@ typedef struct {
     uint32_t has_orientation_tracking;
 } OxTrackingCapabilities;
 
+// Controller information
+#define OX_MAX_CONTROLLERS 2
+
+typedef enum {
+    OX_CONTROLLER_LEFT = 0,
+    OX_CONTROLLER_RIGHT = 1,
+} OxControllerIndex;
+
+typedef struct {
+    uint32_t is_active;  // 1 if controller is connected/tracked, 0 otherwise
+    OxPose pose;
+} OxControllerState;
+
 // Driver callbacks - implement these in your driver
 struct OxDriverCallbacks {
     // ========== Lifecycle ==========
@@ -107,6 +120,25 @@ struct OxDriverCallbacks {
     // eye_index: 0 = left, 1 = right
     // out_pose: write the eye pose here
     void (*update_view_pose)(int64_t predicted_time, uint32_t eye_index, OxPose* out_pose);
+
+    // ========== Controllers (Optional) ==========
+
+    // Update controller state for given controller index
+    // predicted_time: nanoseconds since epoch
+    // controller_index: OX_CONTROLLER_LEFT or OX_CONTROLLER_RIGHT
+    // out_state: write the controller state here (set is_active=0 if not connected)
+    // This callback is optional - set to NULL if controllers are not supported
+    void (*update_controller_state)(int64_t predicted_time, uint32_t controller_index, OxControllerState* out_state);
+
+    // ========== Interaction Profiles (Optional) ==========
+
+    // Get supported interaction profiles for controllers
+    // profiles: array to fill with null-terminated profile path strings
+    // max_profiles: size of the profiles array
+    // Returns: number of supported profiles (may be > max_profiles)
+    // Example profile: "/interaction_profiles/khr/simple_controller"
+    // This callback is optional - if NULL, driver supports /interaction_profiles/khr/simple_controller by default
+    uint32_t (*get_interaction_profiles)(const char** profiles, uint32_t max_profiles);
 };
 
 // Every driver MUST export this function

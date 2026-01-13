@@ -42,6 +42,18 @@ using namespace ox::protocol;
 static std::unordered_map<XrInstance, bool> g_instances;
 static std::unordered_map<XrSession, XrInstance> g_sessions;
 static std::unordered_map<XrSpace, XrSession> g_spaces;
+
+// Action space metadata
+struct ActionSpaceData {
+    XrAction action;
+    XrPath subaction_path;
+};
+static std::unordered_map<XrSpace, ActionSpaceData> g_action_spaces;
+
+// Interaction profile tracking
+static XrPath g_current_interaction_profile = XR_NULL_PATH;
+static std::vector<std::string> g_suggested_profiles;
+
 static std::mutex g_instance_mutex;
 
 // Safe string copy helper - modern C++17+ replacement for strncpy
@@ -605,6 +617,57 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    // Check if this is an action space
+    auto it = g_action_spaces.find(space);
+    if (it != g_action_spaces.end()) {
+        // This is an action space - get controller pose from shared memory
+        auto* shared_data = ServiceConnection::Instance().GetSharedData();
+        if (!shared_data) {
+            location->locationFlags = 0;
+            return XR_SUCCESS;
+        }
+
+        // Determine controller index from subaction path
+        // /user/hand/left = 0, /user/hand/right = 1
+        int controller_index = -1;
+        if (it->second.subaction_path != 0) {
+            // Simple heuristic: use lower bit of path handle
+            // In a real implementation, would parse the path string
+            controller_index = (it->second.subaction_path & 1);
+        }
+
+        if (controller_index >= 0 && controller_index < 2) {
+            // Read controller pose from shared memory (indices 0-1 for controllers)
+            auto& pose_data = shared_data->frame_state.controller_poses[controller_index];
+            uint32_t flags = pose_data.flags.load(std::memory_order_acquire);
+
+            if (flags & 1) {  // Active flag
+                location->locationFlags =
+                    XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
+                    XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT | XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
+
+                location->pose.position.x = pose_data.position[0];
+                location->pose.position.y = pose_data.position[1];
+                location->pose.position.z = pose_data.position[2];
+
+                location->pose.orientation.x = pose_data.orientation[0];
+                location->pose.orientation.y = pose_data.orientation[1];
+                location->pose.orientation.z = pose_data.orientation[2];
+                location->pose.orientation.w = pose_data.orientation[3];
+            } else {
+                // Controller not active
+                location->locationFlags = 0;
+            }
+        } else {
+            location->locationFlags = 0;
+        }
+
+        return XR_SUCCESS;
+    }
+
+    // Regular reference space
     location->locationFlags = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
                               XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT | XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
     location->pose.orientation.x = 0.0f;
@@ -740,12 +803,71 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroyAction(XrAction action) {
 XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
     XrInstance instance, const XrInteractionProfileSuggestedBinding* suggestedBindings) {
     LOG_DEBUG("xrSuggestInteractionProfileBindings called");
+    if (!suggestedBindings) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    // Convert XrPath to string for storage
+    char profile_path[256];
+    uint32_t out_len = 0;
+    XrResult result =
+        xrPathToString(instance, suggestedBindings->interactionProfile, sizeof(profile_path), &out_len, profile_path);
+    if (result == XR_SUCCESS) {
+        std::lock_guard<std::mutex> lock(g_instance_mutex);
+        // Store this profile as a suggested profile
+        std::string profile_str(profile_path);
+        if (std::find(g_suggested_profiles.begin(), g_suggested_profiles.end(), profile_str) ==
+            g_suggested_profiles.end()) {
+            g_suggested_profiles.push_back(profile_str);
+            LOG_DEBUG(("Suggested profile: " + profile_str).c_str());
+        }
+    }
+
     return XR_SUCCESS;
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrAttachSessionActionSets(XrSession session,
                                                          const XrSessionActionSetsAttachInfo* attachInfo) {
     LOG_DEBUG("xrAttachSessionActionSets called");
+
+    // When action sets are attached, select the best matching interaction profile
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    // Get driver-supported profiles from service
+    const auto& driver_profiles = ServiceConnection::Instance().GetInteractionProfiles();
+
+    // Try to find a match between suggested profiles and driver-supported profiles
+    for (const auto& suggested : g_suggested_profiles) {
+        for (uint32_t i = 0; i < driver_profiles.profile_count && i < 8; i++) {
+            std::string driver_profile(driver_profiles.profiles[i]);
+            if (suggested == driver_profile) {
+                // Found a match! Set this as the active profile
+                auto it = g_sessions.find(session);
+                if (it != g_sessions.end()) {
+                    XrInstance instance = it->second;
+                    XrResult result = xrStringToPath(instance, suggested.c_str(), &g_current_interaction_profile);
+                    if (result == XR_SUCCESS) {
+                        LOG_INFO(("Activated interaction profile: " + suggested).c_str());
+                        return XR_SUCCESS;
+                    }
+                }
+            }
+        }
+    }
+
+    // If no match found but driver has profiles, use the first one
+    if (driver_profiles.profile_count > 0) {
+        auto it = g_sessions.find(session);
+        if (it != g_sessions.end()) {
+            XrInstance instance = it->second;
+            std::string profile(driver_profiles.profiles[0]);
+            XrResult result = xrStringToPath(instance, profile.c_str(), &g_current_interaction_profile);
+            if (result == XR_SUCCESS) {
+                LOG_INFO(("Activated default driver profile: " + profile).c_str());
+            }
+        }
+    }
+
     return XR_SUCCESS;
 }
 
@@ -755,7 +877,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetCurrentInteractionProfile(XrSession session,
     if (!interactionProfile) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    interactionProfile->interactionProfile = XR_NULL_PATH;
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    interactionProfile->interactionProfile = g_current_interaction_profile;
     return XR_SUCCESS;
 }
 
@@ -810,7 +934,33 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStatePose(XrSession session, const XrA
     if (!state) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    state->isActive = XR_FALSE;
+    state->isActive = XR_TRUE;
+    return XR_SUCCESS;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSpace(XrSession session, const XrActionSpaceCreateInfo* createInfo,
+                                                   XrSpace* space) {
+    LOG_DEBUG("xrCreateActionSpace called");
+    if (!createInfo || !space) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SPACE);
+    if (handle == 0) {
+        LOG_ERROR("Failed to allocate action space handle from service");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+    XrSpace newSpace = (XrSpace)(uintptr_t)handle;
+    g_spaces[newSpace] = session;
+
+    // Store action space metadata
+    ActionSpaceData data;
+    data.action = createInfo->action;
+    data.subaction_path = createInfo->subactionPath;
+    g_action_spaces[newSpace] = data;
+
+    *space = newSpace;
     return XR_SUCCESS;
 }
 
@@ -977,6 +1127,7 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrGetActionStateFloat"] = (PFN_xrVoidFunction)xrGetActionStateFloat;
     g_clientFunctionMap["xrGetActionStateVector2f"] = (PFN_xrVoidFunction)xrGetActionStateVector2f;
     g_clientFunctionMap["xrGetActionStatePose"] = (PFN_xrVoidFunction)xrGetActionStatePose;
+    g_clientFunctionMap["xrCreateActionSpace"] = (PFN_xrVoidFunction)xrCreateActionSpace;
     g_clientFunctionMap["xrEnumerateSwapchainFormats"] = (PFN_xrVoidFunction)xrEnumerateSwapchainFormats;
     g_clientFunctionMap["xrCreateSwapchain"] = (PFN_xrVoidFunction)xrCreateSwapchain;
     g_clientFunctionMap["xrDestroySwapchain"] = (PFN_xrVoidFunction)xrDestroySwapchain;

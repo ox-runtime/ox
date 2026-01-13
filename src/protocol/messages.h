@@ -38,6 +38,7 @@ enum class MessageType : uint32_t {
     GET_RUNTIME_PROPERTIES = 10,
     GET_SYSTEM_PROPERTIES = 11,
     GET_VIEW_CONFIGURATIONS = 12,
+    GET_INTERACTION_PROFILES = 13,
     RESPONSE = 100,
 };
 
@@ -121,12 +122,17 @@ struct ViewConfigurationsResponse {
     } views[2];  // Stereo
 };
 
+struct InteractionProfilesResponse {
+    uint32_t profile_count;
+    char profiles[8][128];  // Up to 8 interaction profile paths
+};
+
 // Pose data (hot path - shared memory)
 struct ALIGN_64 Pose {
     float position[3];
     float orientation[4];  // Quaternion (x, y, z, w)
     uint64_t timestamp;
-    uint32_t flags;
+    std::atomic<uint32_t> flags;
     uint32_t padding;
 };
 
@@ -144,6 +150,9 @@ struct ALIGN_64 FrameState {
     std::atomic<uint32_t> flags;
 
     View views[2];  // Support stereo for now
+
+    // Controller poses (left=0, right=1)
+    Pose controller_poses[2];
 
     // Graphics handles (platform specific)
 #ifdef _WIN32
@@ -167,7 +176,7 @@ struct ALIGN_4096 SharedData {
     // Frame state (hot path - 90Hz updates)
     FrameState frame_state;
 
-    uint8_t reserved[3568];  // Pad to 4KB
+    uint8_t reserved[3312];  // Pad to 4KB
 };
 
 static_assert(sizeof(SharedData) <= 4096, "SharedData must fit in 4KB page");

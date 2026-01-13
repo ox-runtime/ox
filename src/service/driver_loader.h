@@ -150,6 +150,29 @@ class DriverLoader {
         }
     }
 
+    void UpdateControllerState(int64_t predicted_time, uint32_t controller_index, OxControllerState* out_state) const {
+        if (loaded_ && callbacks_.update_controller_state) {
+            callbacks_.update_controller_state(predicted_time, controller_index, out_state);
+        } else {
+            // Driver doesn't support controllers
+            out_state->is_active = 0;
+        }
+    }
+
+    std::vector<std::string> GetInteractionProfiles() const {
+        std::vector<std::string> profiles;
+        if (loaded_ && callbacks_.get_interaction_profiles) {
+            const char* profile_ptrs[16];
+            uint32_t count = callbacks_.get_interaction_profiles(profile_ptrs, 16);
+            for (uint32_t i = 0; i < count && i < 16; i++) {
+                if (profile_ptrs[i]) {
+                    profiles.push_back(profile_ptrs[i]);
+                }
+            }
+        }
+        return profiles;
+    }
+
     bool IsLoaded() const { return loaded_; }
 
    private:

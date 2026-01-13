@@ -290,6 +290,9 @@ class OxService {
                 case MessageType::GET_VIEW_CONFIGURATIONS:
                     HandleGetViewConfigurations(header);
                     break;
+                case MessageType::GET_INTERACTION_PROFILES:
+                    HandleGetInteractionProfiles(header);
+                    break;
                 default:
                     LOG_ERROR("Unknown message type");
                     break;
@@ -421,6 +424,26 @@ class OxService {
         LOG_DEBUG("Sent view configurations");
     }
 
+    void HandleGetInteractionProfiles(const MessageHeader& request) {
+        InteractionProfilesResponse profiles_response = {};
+
+        // Get supported profiles from driver
+        auto profiles = driver_.GetInteractionProfiles();
+        profiles_response.profile_count = static_cast<uint32_t>(profiles.size());
+
+        for (size_t i = 0; i < profiles.size() && i < 8; i++) {
+            std::strncpy(profiles_response.profiles[i], profiles[i].c_str(), 127);
+            profiles_response.profiles[i][127] = '\0';
+        }
+
+        MessageHeader response;
+        response.type = MessageType::RESPONSE;
+        response.sequence = request.sequence;
+        response.payload_size = sizeof(profiles_response);
+        control_.Send(response, &profiles_response);
+        LOG_DEBUG("Sent interaction profiles");
+    }
+
     void FrameLoop() {
         LOG_INFO("Frame generation thread started");
 
@@ -490,6 +513,22 @@ class OxService {
             frame.views[i].fov[1] = display_props.fov.angle_right;
             frame.views[i].fov[2] = display_props.fov.angle_up;
             frame.views[i].fov[3] = display_props.fov.angle_down;
+        }
+
+        // Update controller poses (left and right)
+        for (int i = 0; i < 2; i++) {
+            OxControllerState controller_state;
+            driver_.UpdateControllerState(predicted_time, i, &controller_state);
+
+            frame.controller_poses[i].position[0] = controller_state.pose.position.x;
+            frame.controller_poses[i].position[1] = controller_state.pose.position.y;
+            frame.controller_poses[i].position[2] = controller_state.pose.position.z;
+            frame.controller_poses[i].orientation[0] = controller_state.pose.orientation.x;
+            frame.controller_poses[i].orientation[1] = controller_state.pose.orientation.y;
+            frame.controller_poses[i].orientation[2] = controller_state.pose.orientation.z;
+            frame.controller_poses[i].orientation[3] = controller_state.pose.orientation.w;
+            frame.controller_poses[i].timestamp = predicted_time;
+            frame.controller_poses[i].flags.store(controller_state.is_active, std::memory_order_release);
         }
     }
 
