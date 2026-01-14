@@ -16,6 +16,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebI
     add_compile_definitions(NDEBUG)
 endif()
 
+# Use static runtime library (/MT) on Windows for better compatibility
+if(WIN32 AND MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # Fetch OpenXR SDK
 FetchContent_Declare(
     openxr
