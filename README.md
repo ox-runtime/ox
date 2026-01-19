@@ -2,7 +2,7 @@
 
 **ox** is a simple and lightweight OpenXR runtime for Windows and Linux.
 
-The primary purpose of **ox** is automated testing of OpenXR applications. It comes with a virtual OpenXR device which can be controlled programmatically (e.g. press a button, turn the headset etc). The effect of these actions can then be verified in the OpenXR application that you're testing.
+The primary purpose of **ox** is automated testing of OpenXR applications. It comes with a virtual OpenXR device which can be controlled programmatically (e.g. press a button, move the headset etc). The effect of these actions can then be verified in the OpenXR application that you're testing.
 
 ## Building
 
