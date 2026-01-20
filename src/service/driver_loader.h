@@ -77,8 +77,7 @@ class DriverLoader {
         }
 
         // Verify all required callbacks are present
-        if (!callbacks_.initialize || !callbacks_.is_device_connected || !callbacks_.update_pose ||
-            !callbacks_.update_view_pose) {
+        if (!callbacks_.initialize || !callbacks_.is_device_connected || !callbacks_.update_view_pose) {
             LOG_ERROR("Driver missing required callbacks");
             Unload();
             return false;
@@ -135,12 +134,6 @@ class DriverLoader {
     void GetTrackingCapabilities(OxTrackingCapabilities* caps) const {
         if (loaded_ && callbacks_.get_tracking_capabilities) {
             callbacks_.get_tracking_capabilities(caps);
-        }
-    }
-
-    void UpdatePose(int64_t predicted_time, OxPose* out_pose) const {
-        if (loaded_ && callbacks_.update_pose) {
-            callbacks_.update_pose(predicted_time, out_pose);
         }
     }
 

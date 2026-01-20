@@ -125,15 +125,11 @@ struct OxDriverCallbacks {
 
     // ========== Hot Path - Called Every Frame ==========
 
-    // Update HMD pose for given predicted display time
-    // predicted_time: nanoseconds since epoch
-    // out_pose: write the HMD pose here
-    void (*update_pose)(int64_t predicted_time, OxPose* out_pose);
-
-    // Update per-eye view poses (typically just IPD offset from HMD pose)
+    // Update per-eye view poses for rendering
     // predicted_time: nanoseconds since epoch
     // eye_index: 0 = left, 1 = right
-    // out_pose: write the eye pose here
+    // out_pose: write the eye pose here (typically HMD pose + IPD offset)
+    // Note: HMD tracking pose should be reported via update_devices() as device[0] with user_path="/user/head"
     void (*update_view_pose)(int64_t predicted_time, uint32_t eye_index, OxPose* out_pose);
 
     // ========== Devices (Controllers, Trackers, etc.) ==========
