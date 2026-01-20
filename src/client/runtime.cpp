@@ -80,6 +80,10 @@ static std::unordered_map<XrAction, ActionData> g_actions;
 static std::unordered_map<XrPath, std::string> g_path_to_string;
 static std::unordered_map<std::string, XrPath> g_string_to_path;
 
+// Device path mapping (user path -> device index in shared memory)
+static std::unordered_map<std::string, int> g_device_path_to_index;
+static bool g_device_map_built = false;
+
 // Action binding metadata - maps binding path to action
 struct BindingData {
     XrAction action;
@@ -102,10 +106,63 @@ inline void safe_copy_string(char* dest, size_t dest_size, std::string_view src)
     dest[copy_len] = '\0';
 }
 
-// Helper: Extract controller index from binding path string
-// Returns 0 for left hand, 1 for right hand
-inline uint32_t GetControllerIndexFromPath(const std::string& path_str) {
-    return (path_str.find("/user/hand/right") != std::string::npos) ? 1 : 0;
+// Helper: Build device path mapping from shared memory
+inline void BuildDeviceMap() {
+    if (g_device_map_built) {
+        return;
+    }
+
+    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    if (!shared_data) {
+        return;
+    }
+
+    g_device_path_to_index.clear();
+    uint32_t device_count = shared_data->fields.frame_state.device_count.load(std::memory_order_acquire);
+
+    for (uint32_t i = 0; i < device_count && i < MAX_TRACKED_DEVICES; i++) {
+        std::string user_path(shared_data->fields.frame_state.device_poses[i].user_path);
+        if (!user_path.empty()) {
+            g_device_path_to_index[user_path] = i;
+        }
+    }
+
+    g_device_map_built = true;
+}
+
+// Helper: Extract user path from full binding path
+// "/user/hand/left/input/trigger/value" -> "/user/hand/left"
+inline std::string ExtractUserPath(const std::string& full_path) {
+    size_t input_pos = full_path.find("/input/");
+    if (input_pos != std::string::npos) {
+        return full_path.substr(0, input_pos);
+    }
+    return full_path;
+}
+
+// Helper: Extract component path from full binding path
+// "/user/hand/left/input/trigger/value" -> "/input/trigger/value"
+inline std::string ExtractComponentPath(const std::string& full_path) {
+    size_t input_pos = full_path.find("/input/");
+    if (input_pos != std::string::npos) {
+        return full_path.substr(input_pos);
+    }
+    // For output paths like /output/haptic
+    size_t output_pos = full_path.find("/output/");
+    if (output_pos != std::string::npos) {
+        return full_path.substr(output_pos);
+    }
+    return full_path;
+}
+
+// Helper: Find device index from user path
+inline int FindDeviceIndex(const std::string& user_path) {
+    BuildDeviceMap();
+    auto it = g_device_path_to_index.find(user_path);
+    if (it != g_device_path_to_index.end()) {
+        return it->second;
+    }
+    return -1;
 }
 
 // Helper: Get instance from session
@@ -176,18 +233,20 @@ inline XrResult GetActionStateGeneric(XrSession session, const XrActionStateGetI
             continue;
         }
 
-        // Convert binding path to string to extract component path
+        // Convert binding path to string to extract user path and component path
         char binding_path_str[256];
         uint32_t len = 0;
         xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
 
-        // Determine controller index from path
+        // Extract user path and component path from binding path
         std::string path_str(binding_path_str);
-        uint32_t controller_index = GetControllerIndexFromPath(path_str);
+        std::string user_path = ExtractUserPath(path_str);
+        std::string component_path = ExtractComponentPath(path_str);
 
         // Query the driver for component state
         ox::protocol::InputComponentStateResponse response;
-        if (ServiceConnection::Instance().GetInputComponentState(controller_index, binding_path_str, 0, response)) {
+        if (ServiceConnection::Instance().GetInputComponentState(user_path.c_str(), component_path.c_str(), 0,
+                                                                 response)) {
             if (response.is_available) {
                 extract_value(state, response);
                 return XR_SUCCESS;
@@ -675,7 +734,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
 
     // Wait briefly for service to set the session handle
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    uint64_t handle = shared_data->active_session_handle.load(std::memory_order_acquire);
+    uint64_t handle = shared_data->fields.active_session_handle.load(std::memory_order_acquire);
 
     if (handle == 0) {
         LOG_ERROR("xrCreateSession: Service did not create session");
@@ -783,11 +842,10 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
             return XR_SUCCESS;
         }
 
-        // Determine controller index from subaction path
-        // /user/hand/left = 0, /user/hand/right = 1
-        int controller_index = -1;
+        // Determine device index from subaction path
+        int device_index = -1;
         if (it->second.subaction_path != 0) {
-            // Convert path to string to properly identify the hand
+            // Convert path to string to get user path
             char subaction_path_str[256];
             uint32_t len = 0;
             auto sessions_it = g_spaces.find(space);
@@ -796,31 +854,31 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
                 if (instance_it != g_sessions.end()) {
                     xrPathToString(instance_it->second, it->second.subaction_path, sizeof(subaction_path_str), &len,
                                    subaction_path_str);
-                    controller_index = GetControllerIndexFromPath(std::string(subaction_path_str));
+                    std::string user_path(subaction_path_str);
+                    device_index = FindDeviceIndex(user_path);
                 }
             }
         }
 
-        if (controller_index >= 0 && controller_index < 2) {
-            // Read controller pose from shared memory (indices 0-1 for controllers)
-            auto& pose_data = shared_data->frame_state.controller_poses[controller_index];
-            uint32_t flags = pose_data.flags.load(std::memory_order_acquire);
+        if (device_index >= 0 && device_index < MAX_TRACKED_DEVICES) {
+            // Read device pose from shared memory
+            auto& device_data = shared_data->fields.frame_state.device_poses[device_index];
 
-            if (flags & 1) {  // Active flag
+            if (device_data.is_active) {
                 location->locationFlags =
                     XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
                     XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT | XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
 
-                location->pose.position.x = pose_data.position[0];
-                location->pose.position.y = pose_data.position[1];
-                location->pose.position.z = pose_data.position[2];
+                location->pose.position.x = device_data.pose.position[0];
+                location->pose.position.y = device_data.pose.position[1];
+                location->pose.position.z = device_data.pose.position[2];
 
-                location->pose.orientation.x = pose_data.orientation[0];
-                location->pose.orientation.y = pose_data.orientation[1];
-                location->pose.orientation.z = pose_data.orientation[2];
-                location->pose.orientation.w = pose_data.orientation[3];
+                location->pose.orientation.x = device_data.pose.orientation[0];
+                location->pose.orientation.y = device_data.pose.orientation[1];
+                location->pose.orientation.z = device_data.pose.orientation[2];
+                location->pose.orientation.w = device_data.pose.orientation[3];
             } else {
-                // Controller not active
+                // Device not active
                 location->locationFlags = 0;
             }
         } else {
@@ -855,7 +913,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitI
     auto* shared_data = ServiceConnection::Instance().GetSharedData();
     if (shared_data) {
         frameState->predictedDisplayTime =
-            shared_data->frame_state.predicted_display_time.load(std::memory_order_acquire);
+            shared_data->fields.frame_state.predicted_display_time.load(std::memory_order_acquire);
         frameState->predictedDisplayPeriod = 11111111;  // ~90 FPS
     } else {
         frameState->predictedDisplayTime = 0;
@@ -905,13 +963,13 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLoca
     // Read pose data from shared memory
     auto* shared_data = ServiceConnection::Instance().GetSharedData();
     if (views && viewCapacityInput >= 2 && shared_data) {
-        uint32_t view_count = shared_data->frame_state.view_count.load(std::memory_order_acquire);
+        uint32_t view_count = shared_data->fields.frame_state.view_count.load(std::memory_order_acquire);
 
         for (uint32_t i = 0; i < 2 && i < viewCapacityInput; i++) {
             views[i].type = XR_TYPE_VIEW;
             views[i].next = nullptr;
 
-            auto& view_data = shared_data->frame_state.views[i];
+            auto& view_data = shared_data->fields.frame_state.views[i];
 
             views[i].pose.position.x = view_data.pose.position[0];
             views[i].pose.position.y = view_data.pose.position[1];

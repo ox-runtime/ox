@@ -41,7 +41,7 @@ class ServiceConnection {
     const protocol::InteractionProfilesResponse& GetInteractionProfiles() const { return interaction_profiles_; }
 
     // Query input component state from driver
-    bool GetInputComponentState(uint32_t controller_index, const char* component_path, int64_t predicted_time,
+    bool GetInputComponentState(const char* user_path, const char* component_path, int64_t predicted_time,
                                 protocol::InputComponentStateResponse& out_response);
 
    private:

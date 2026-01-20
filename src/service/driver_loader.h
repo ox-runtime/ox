@@ -150,12 +150,14 @@ class DriverLoader {
         }
     }
 
-    void UpdateControllerState(int64_t predicted_time, uint32_t controller_index, OxControllerState* out_state) const {
-        if (loaded_ && callbacks_.update_controller_state) {
-            callbacks_.update_controller_state(predicted_time, controller_index, out_state);
+    bool HasUpdateDevices() const { return loaded_ && callbacks_.update_devices; }
+
+    void UpdateDevices(int64_t predicted_time, OxDeviceState* out_states, uint32_t* out_count) const {
+        if (loaded_ && callbacks_.update_devices) {
+            callbacks_.update_devices(predicted_time, out_states, out_count);
         } else {
-            // Driver doesn't support controllers
-            out_state->is_active = 0;
+            // Driver doesn't support devices
+            *out_count = 0;
         }
     }
 
@@ -173,12 +175,12 @@ class DriverLoader {
         return profiles;
     }
 
-    uint32_t GetInputComponentState(int64_t predicted_time, uint32_t controller_index, const char* component_path,
+    uint32_t GetInputComponentState(int64_t predicted_time, const char* user_path, const char* component_path,
                                     uint32_t* boolean_value, float* float_value, float* x, float* y) const {
         if (loaded_ && callbacks_.get_input_component_state) {
             OxInputComponentState state = {};
             OxComponentResult result =
-                callbacks_.get_input_component_state(predicted_time, controller_index, component_path, &state);
+                callbacks_.get_input_component_state(predicted_time, user_path, component_path, &state);
             if (result == OX_COMPONENT_AVAILABLE) {
                 *boolean_value = state.boolean_value;
                 *float_value = state.float_value;

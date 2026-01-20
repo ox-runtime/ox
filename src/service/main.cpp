@@ -45,9 +45,9 @@ class OxService {
         shared_data_ = static_cast<SharedData*>(shared_mem_.GetPointer());
 
         // Initialize protocol metadata
-        shared_data_->protocol_version.store(PROTOCOL_VERSION, std::memory_order_release);
-        shared_data_->service_ready.store(1, std::memory_order_release);
-        shared_data_->client_connected.store(0, std::memory_order_release);
+        shared_data_->fields.protocol_version.store(PROTOCOL_VERSION, std::memory_order_release);
+        shared_data_->fields.service_ready.store(1, std::memory_order_release);
+        shared_data_->fields.client_connected.store(0, std::memory_order_release);
 
         // Initialize static properties (stored in service, not shared memory)
         InitializeRuntimeProperties();
@@ -55,8 +55,8 @@ class OxService {
         InitializeViewConfigurations();
 
         // Initialize session state (dynamic)
-        shared_data_->session_state.store(static_cast<uint32_t>(SessionState::IDLE), std::memory_order_release);
-        shared_data_->active_session_handle.store(0, std::memory_order_release);
+        shared_data_->fields.session_state.store(static_cast<uint32_t>(SessionState::IDLE), std::memory_order_release);
+        shared_data_->fields.active_session_handle.store(0, std::memory_order_release);
 
         // Create control channel
         if (!control_.CreateServer("ox_runtime_control")) {
@@ -85,13 +85,13 @@ class OxService {
             }
 
             LOG_INFO("ox-service: Client connected");
-            shared_data_->client_connected.store(1, std::memory_order_release);
+            shared_data_->fields.client_connected.store(1, std::memory_order_release);
 
             // Handle control messages for this client
             MessageLoop();
 
             // Client disconnected, clean up and wait for next client
-            shared_data_->client_connected.store(0, std::memory_order_release);
+            shared_data_->fields.client_connected.store(0, std::memory_order_release);
             control_.Close();
 
             // Recreate control channel for next client
@@ -228,14 +228,15 @@ class OxService {
     }
 
     void TransitionSessionState(SessionState new_state) {
-        SessionState old_state = static_cast<SessionState>(shared_data_->session_state.load(std::memory_order_acquire));
+        SessionState old_state =
+            static_cast<SessionState>(shared_data_->fields.session_state.load(std::memory_order_acquire));
 
         if (old_state != new_state) {
-            shared_data_->session_state.store(static_cast<uint32_t>(new_state), std::memory_order_release);
+            shared_data_->fields.session_state.store(static_cast<uint32_t>(new_state), std::memory_order_release);
 
             // Queue state change event
             SessionStateEvent event;
-            event.session_handle = shared_data_->active_session_handle.load(std::memory_order_acquire);
+            event.session_handle = shared_data_->fields.active_session_handle.load(std::memory_order_acquire);
             event.state = new_state;
 
             auto now = std::chrono::steady_clock::now();
@@ -315,7 +316,7 @@ class OxService {
     void HandleCreateSession(const MessageHeader& request) {
         // Allocate session handle
         uint64_t session_handle = AllocateHandle(HandleType::SESSION);
-        shared_data_->active_session_handle.store(session_handle, std::memory_order_release);
+        shared_data_->fields.active_session_handle.store(session_handle, std::memory_order_release);
 
         // Transition to READY state
         TransitionSessionState(SessionState::READY);
@@ -343,10 +344,10 @@ class OxService {
     }
 
     void HandleDestroySession(const MessageHeader& request) {
-        uint64_t session_handle = shared_data_->active_session_handle.load(std::memory_order_acquire);
+        uint64_t session_handle = shared_data_->fields.active_session_handle.load(std::memory_order_acquire);
         if (session_handle != 0) {
             FreeHandle(session_handle);
-            shared_data_->active_session_handle.store(0, std::memory_order_release);
+            shared_data_->fields.active_session_handle.store(0, std::memory_order_release);
         }
 
         TransitionSessionState(SessionState::IDLE);
@@ -458,7 +459,7 @@ class OxService {
 
         InputComponentStateResponse component_response = {};
         component_response.is_available = driver_.GetInputComponentState(
-            component_request->predicted_time, component_request->controller_index, component_request->component_path,
+            component_request->predicted_time, component_request->user_path, component_request->component_path,
             &component_response.boolean_value, &component_response.float_value, &component_response.x,
             &component_response.y);
 
@@ -491,7 +492,7 @@ class OxService {
     }
 
     void UpdatePoseData() {
-        auto& frame = shared_data_->frame_state;
+        auto& frame = shared_data_->fields.frame_state;
 
         // Update frame counter
         uint64_t frame_id = frame_counter_++;
@@ -541,20 +542,33 @@ class OxService {
             frame.views[i].fov[3] = display_props.fov.angle_down;
         }
 
-        // Update controller poses (left and right)
-        for (int i = 0; i < 2; i++) {
-            OxControllerState controller_state;
-            driver_.UpdateControllerState(predicted_time, i, &controller_state);
+        // Update all tracked devices (controllers, trackers, etc.)
+        if (driver_.HasUpdateDevices()) {
+            OxDeviceState devices[OX_MAX_DEVICES];
+            uint32_t device_count = 0;
+            driver_.UpdateDevices(predicted_time, devices, &device_count);
 
-            frame.controller_poses[i].position[0] = controller_state.pose.position.x;
-            frame.controller_poses[i].position[1] = controller_state.pose.position.y;
-            frame.controller_poses[i].position[2] = controller_state.pose.position.z;
-            frame.controller_poses[i].orientation[0] = controller_state.pose.orientation.x;
-            frame.controller_poses[i].orientation[1] = controller_state.pose.orientation.y;
-            frame.controller_poses[i].orientation[2] = controller_state.pose.orientation.z;
-            frame.controller_poses[i].orientation[3] = controller_state.pose.orientation.w;
-            frame.controller_poses[i].timestamp = predicted_time;
-            frame.controller_poses[i].flags.store(controller_state.is_active, std::memory_order_release);
+            frame.device_count.store(device_count, std::memory_order_release);
+
+            for (uint32_t i = 0; i < device_count && i < MAX_TRACKED_DEVICES; i++) {
+                // Use strncpy for safe string copying
+                std::strncpy(frame.device_poses[i].user_path, devices[i].user_path,
+                             sizeof(frame.device_poses[i].user_path) - 1);
+                frame.device_poses[i].user_path[sizeof(frame.device_poses[i].user_path) - 1] = '\0';
+
+                frame.device_poses[i].pose.position[0] = devices[i].pose.position.x;
+                frame.device_poses[i].pose.position[1] = devices[i].pose.position.y;
+                frame.device_poses[i].pose.position[2] = devices[i].pose.position.z;
+                frame.device_poses[i].pose.orientation[0] = devices[i].pose.orientation.x;
+                frame.device_poses[i].pose.orientation[1] = devices[i].pose.orientation.y;
+                frame.device_poses[i].pose.orientation[2] = devices[i].pose.orientation.z;
+                frame.device_poses[i].pose.orientation[3] = devices[i].pose.orientation.w;
+                frame.device_poses[i].pose.timestamp = predicted_time;
+                frame.device_poses[i].pose.flags.store(devices[i].is_active, std::memory_order_release);
+                frame.device_poses[i].is_active = devices[i].is_active;
+            }
+        } else {
+            frame.device_count.store(0, std::memory_order_release);
         }
     }
 

@@ -45,11 +45,25 @@ class SharedMemory {
         }
 
         if (!handle_) {
+            DWORD error = GetLastError();
+            fprintf(stderr, "SharedMemory::%s failed for '%s': Error %lu (size=%zu)\n",
+                    create_new ? "CreateFileMapping" : "OpenFileMapping", name, error, size);
+            fflush(stderr);
             return false;
+        }
+
+        if (create_new) {
+            fprintf(stderr, "SharedMemory::Created '%s' with size %zu bytes\n", name, size);
+            fflush(stderr);
+        } else {
+            fprintf(stderr, "SharedMemory::Opened '%s' expecting size %zu bytes\n", name, size);
+            fflush(stderr);
         }
 
         ptr_ = MapViewOfFile(handle_, FILE_MAP_ALL_ACCESS, 0, 0, size);
         if (!ptr_) {
+            DWORD error = GetLastError();
+            fprintf(stderr, "SharedMemory::MapViewOfFile failed for '%s': Error %lu (size=%zu)\n", name, error, size);
             CloseHandle(handle_);
             handle_ = nullptr;
             return false;

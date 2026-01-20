@@ -9,15 +9,6 @@
 #include <sys/types.h>
 #endif
 
-// Platform-specific alignment macros
-#ifdef _MSC_VER
-#define ALIGN_64 __declspec(align(64))
-#define ALIGN_4096 __declspec(align(4096))
-#else
-#define ALIGN_64 __attribute__((aligned(64)))
-#define ALIGN_4096 __attribute__((aligned(4096)))
-#endif
-
 namespace ox {
 namespace protocol {
 
@@ -129,8 +120,8 @@ struct InteractionProfilesResponse {
 };
 
 struct InputComponentStateRequest {
-    uint32_t controller_index;  // 0 = left, 1 = right
-    char component_path[128];   // e.g., "/input/trigger/value"
+    char user_path[256];       // e.g., "/user/hand/left", "/user/vive_tracker_htcx/role/waist"
+    char component_path[128];  // e.g., "/input/trigger/value"
     int64_t predicted_time;
 };
 
@@ -143,11 +134,21 @@ struct InputComponentStateResponse {
 };
 
 // Pose data (hot path - shared memory)
-struct ALIGN_64 Pose {
+struct alignas(64) Pose {
     float position[3];
     float orientation[4];  // Quaternion (x, y, z, w)
     uint64_t timestamp;
     std::atomic<uint32_t> flags;
+    uint32_t padding;
+};
+
+// Device pose data (controllers, trackers, etc.)
+#define MAX_TRACKED_DEVICES 16  // Support up to 16 devices
+
+struct DevicePose {
+    char user_path[256];  // OpenXR user path
+    Pose pose;
+    uint32_t is_active;
     uint32_t padding;
 };
 
@@ -158,7 +159,7 @@ struct View {
 };
 
 // Frame state (shared memory hot path)
-struct ALIGN_64 FrameState {
+struct alignas(64) FrameState {
     std::atomic<uint64_t> frame_id;
     std::atomic<uint64_t> predicted_display_time;
     std::atomic<uint32_t> view_count;
@@ -166,8 +167,10 @@ struct ALIGN_64 FrameState {
 
     View views[2];  // Support stereo for now
 
-    // Controller poses (left=0, right=1)
-    Pose controller_poses[2];
+    // Tracked devices (controllers, trackers, etc.)
+    std::atomic<uint32_t> device_count;
+    uint32_t padding1;
+    DevicePose device_poses[MAX_TRACKED_DEVICES];
 
     // Graphics handles (platform specific)
 #ifdef _WIN32
@@ -178,23 +181,32 @@ struct ALIGN_64 FrameState {
 };
 
 // Shared memory layout (only dynamic data - hot path optimized)
-struct ALIGN_4096 SharedData {
-    std::atomic<uint32_t> protocol_version;
-    std::atomic<uint32_t> service_ready;
-    std::atomic<uint32_t> client_connected;
-    uint32_t padding1;
+constexpr std::size_t SHARED_DATA_SIZE = 8192;  // 8KB total size
 
-    // Session state (dynamic)
-    std::atomic<uint32_t> session_state;  // SessionState enum
-    std::atomic<uint64_t> active_session_handle;
+// Shared data with automatic sizing
+struct alignas(4096) SharedData {
+    union {
+        struct {
+            std::atomic<uint32_t> protocol_version;
+            std::atomic<uint32_t> service_ready;
+            std::atomic<uint32_t> client_connected;
+            uint32_t padding1;
 
-    // Frame state (hot path - 90Hz updates)
-    FrameState frame_state;
+            // Session state (dynamic)
+            std::atomic<uint32_t> session_state;  // SessionState enum
+            std::atomic<uint64_t> active_session_handle;
 
-    uint8_t reserved[3312];  // Pad to 4KB
+            // Frame state (hot path - 90Hz updates)
+            FrameState frame_state;
+        } fields;
+
+        // Union with raw array ensures exact size without manual padding calculation
+        std::byte raw[SHARED_DATA_SIZE];
+    };
 };
 
-static_assert(sizeof(SharedData) <= 4096, "SharedData must fit in 4KB page");
+static_assert(sizeof(SharedData) == SHARED_DATA_SIZE, "SharedData size doesn't match SHARED_DATA_SIZE");
+static_assert(alignof(SharedData) == 4096, "SharedData alignment is not 4096 bytes");
 
 }  // namespace protocol
 }  // namespace ox

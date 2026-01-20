@@ -26,7 +26,7 @@ bool ServiceConnection::Connect() {
     shared_data_ = static_cast<protocol::SharedData*>(shared_mem_.GetPointer());
 
     // Verify protocol version
-    uint32_t version = shared_data_->protocol_version.load(std::memory_order_acquire);
+    uint32_t version = shared_data_->fields.protocol_version.load(std::memory_order_acquire);
     if (version != protocol::PROTOCOL_VERSION) {
         std::ostringstream error_msg;
         error_msg << "Protocol version mismatch - service: " << version
@@ -54,7 +54,7 @@ bool ServiceConnection::Connect() {
     }
 
     connected_ = true;
-    shared_data_->client_connected.store(1, std::memory_order_release);
+    shared_data_->fields.client_connected.store(1, std::memory_order_release);
 
     LOG_INFO("Connected to ox-service successfully");
     return true;
@@ -70,7 +70,7 @@ void ServiceConnection::Disconnect() {
     SendRequest(protocol::MessageType::DISCONNECT);
 
     if (shared_data_) {
-        shared_data_->client_connected.store(0, std::memory_order_release);
+        shared_data_->fields.client_connected.store(0, std::memory_order_release);
     }
 
     control_.Close();
@@ -258,22 +258,21 @@ bool ServiceConnection::QueryStaticMetadata() {
     return true;
 }
 
-bool ServiceConnection::GetInputComponentState(uint32_t controller_index, const char* component_path,
+bool ServiceConnection::GetInputComponentState(const char* user_path, const char* component_path,
                                                int64_t predicted_time,
                                                protocol::InputComponentStateResponse& out_response) {
     std::lock_guard<std::mutex> lock(send_mutex_);
 
     protocol::InputComponentStateRequest request;
-    request.controller_index = controller_index;
     request.predicted_time = predicted_time;
 
+    // Copy user path safely
+    std::strncpy(request.user_path, user_path, sizeof(request.user_path) - 1);
+    request.user_path[sizeof(request.user_path) - 1] = '\0';
+
     // Copy component path safely
-    size_t path_len = std::strlen(component_path);
-    if (path_len >= sizeof(request.component_path)) {
-        LOG_ERROR("Component path too long");
-        return false;
-    }
-    std::strcpy(request.component_path, component_path);
+    std::strncpy(request.component_path, component_path, sizeof(request.component_path) - 1);
+    request.component_path[sizeof(request.component_path) - 1] = '\0';
 
     protocol::MessageHeader header;
     header.type = protocol::MessageType::GET_INPUT_COMPONENT_STATE;

@@ -67,18 +67,14 @@ typedef struct {
     uint32_t has_orientation_tracking;
 } OxTrackingCapabilities;
 
-// Controller information
-#define OX_MAX_CONTROLLERS 2
-
-typedef enum {
-    OX_CONTROLLER_LEFT = 0,
-    OX_CONTROLLER_RIGHT = 1,
-} OxControllerIndex;
+// Device information (controllers, trackers, etc.)
+#define OX_MAX_DEVICES 16
 
 typedef struct {
-    uint32_t is_active;  // 1 if controller is connected/tracked, 0 otherwise
+    char user_path[256];  // OpenXR user path: "/user/hand/left", "/user/vive_tracker_htcx/role/waist", etc.
     OxPose pose;
-} OxControllerState;
+    uint32_t is_active;  // 1 if device is connected/tracked, 0 otherwise
+} OxDeviceState;
 
 // Component state result codes
 typedef enum {
@@ -140,18 +136,18 @@ struct OxDriverCallbacks {
     // out_pose: write the eye pose here
     void (*update_view_pose)(int64_t predicted_time, uint32_t eye_index, OxPose* out_pose);
 
-    // ========== Controllers (Optional) ==========
+    // ========== Devices (Controllers, Trackers, etc.) ==========
 
-    // Update controller state for given controller index
+    // Update all tracked devices (controllers, trackers, etc.)
     // predicted_time: nanoseconds since epoch
-    // controller_index: OX_CONTROLLER_LEFT or OX_CONTROLLER_RIGHT
-    // out_state: write the controller state here (set is_active=0 if not connected)
-    // This callback is optional - set to NULL if controllers are not supported
-    void (*update_controller_state)(int64_t predicted_time, uint32_t controller_index, OxControllerState* out_state);
+    // out_states: array to fill with device states (must have space for OX_MAX_DEVICES)
+    // out_count: write the number of devices here (must be <= OX_MAX_DEVICES)
+    // This callback is optional - set to NULL if no tracked devices are supported
+    void (*update_devices)(int64_t predicted_time, OxDeviceState* out_states, uint32_t* out_count);
 
-    // Get input component state by path
+    // Get input component state for a device
     // predicted_time: nanoseconds since epoch
-    // controller_index: OX_CONTROLLER_LEFT or OX_CONTROLLER_RIGHT
+    // user_path: OpenXR user path (e.g., "/user/hand/left", "/user/vive_tracker_htcx/role/waist")
     // component_path: OpenXR component path (e.g., "/input/trigger/value", "/input/a/click", "/input/thumbstick")
     // out_state: write the component state here
     // Returns: OX_COMPONENT_AVAILABLE if component exists, OX_COMPONENT_UNAVAILABLE otherwise
@@ -166,8 +162,8 @@ struct OxDriverCallbacks {
     //   "/input/thumbstick/x"       -> float_value (-1.0 to 1.0)
     //   "/input/thumbstick/click"   -> boolean_value
     //
-    // This callback is optional - set to NULL if controllers are not supported
-    OxComponentResult (*get_input_component_state)(int64_t predicted_time, uint32_t controller_index,
+    // This callback is optional - set to NULL if devices are not supported
+    OxComponentResult (*get_input_component_state)(int64_t predicted_time, const char* user_path,
                                                    const char* component_path, OxInputComponentState* out_state);
 
     // ========== Interaction Profiles (Optional) ==========
