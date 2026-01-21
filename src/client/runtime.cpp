@@ -283,7 +283,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties(const char
                                                                       uint32_t* propertyCountOutput,
                                                                       XrExtensionProperties* properties) {
     LOG_DEBUG("xrEnumerateInstanceExtensionProperties called");
-    const char* extensions[] = {"XR_KHR_opengl_enable"};
+    const char* extensions[] = {"XR_KHR_opengl_enable", "XR_HTCX_vive_tracker_interaction"};
     const uint32_t extensionCount = sizeof(extensions) / sizeof(extensions[0]);
 
     if (propertyCountOutput) {
@@ -1528,6 +1528,50 @@ XRAPI_ATTR XrResult XRAPI_CALL xrPathToString(XrInstance instance, XrPath path, 
     return XR_SUCCESS;
 }
 
+// Vive Tracker extension
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViveTrackerPathsHTCX(XrInstance instance, uint32_t pathCapacityInput,
+                                                               uint32_t* pathCountOutput,
+                                                               XrViveTrackerPathsHTCX* paths) {
+    LOG_DEBUG("xrEnumerateViveTrackerPathsHTCX called");
+    if (!pathCountOutput) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    // Build device map if not already built
+    BuildDeviceMap();
+
+    // Count trackers - look for devices with /user/vive_tracker_htcx paths
+    std::vector<std::pair<std::string, int>> tracker_devices;
+    for (const auto& [user_path, device_index] : g_device_path_to_index) {
+        if (user_path.find("/user/vive_tracker_htcx/role/") == 0) {
+            tracker_devices.push_back({user_path, device_index});
+        }
+    }
+
+    uint32_t tracker_count = static_cast<uint32_t>(tracker_devices.size());
+    *pathCountOutput = tracker_count;
+
+    if (pathCapacityInput == 0 || !paths) {
+        return XR_SUCCESS;
+    }
+
+    // Fill in tracker paths
+    uint32_t count = std::min(pathCapacityInput, tracker_count);
+    for (uint32_t i = 0; i < count; i++) {
+        paths[i].type = static_cast<XrStructureType>(1000103000);  // XR_TYPE_VIVE_TRACKER_PATHS_HTCX
+        paths[i].next = nullptr;
+
+        // Convert user path string to XrPath
+        const std::string& user_path = tracker_devices[i].first;
+        xrStringToPath(instance, user_path.c_str(), &paths[i].persistentPath);
+        paths[i].rolePath = paths[i].persistentPath;  // For simplicity, use same path
+    }
+
+    return XR_SUCCESS;
+}
+
 // OpenGL extension
 XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
     XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsOpenGLKHR* graphicsRequirements) {
@@ -1599,6 +1643,7 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrStringToPath"] = (PFN_xrVoidFunction)xrStringToPath;
     g_clientFunctionMap["xrPathToString"] = (PFN_xrVoidFunction)xrPathToString;
     g_clientFunctionMap["xrGetOpenGLGraphicsRequirementsKHR"] = (PFN_xrVoidFunction)xrGetOpenGLGraphicsRequirementsKHR;
+    g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] = (PFN_xrVoidFunction)xrEnumerateViveTrackerPathsHTCX;
 }
 
 // xrGetInstanceProcAddr
