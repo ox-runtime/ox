@@ -455,13 +455,12 @@ class OxService {
     }
 
     void HandleGetInputStateBoolean(const MessageHeader& request, const std::vector<uint8_t>& payload) {
-        if (payload.size() < sizeof(InputStateBooleanRequest)) {
+        if (payload.size() < sizeof(InputStateRequest)) {
             LOG_ERROR("Invalid input state boolean request");
             return;
         }
 
-        const InputStateBooleanRequest* state_request =
-            reinterpret_cast<const InputStateBooleanRequest*>(payload.data());
+        const InputStateRequest* state_request = reinterpret_cast<const InputStateRequest*>(payload.data());
 
         InputStateBooleanResponse state_response = {};
         uint32_t value = 0;
@@ -478,12 +477,12 @@ class OxService {
     }
 
     void HandleGetInputStateFloat(const MessageHeader& request, const std::vector<uint8_t>& payload) {
-        if (payload.size() < sizeof(InputStateFloatRequest)) {
+        if (payload.size() < sizeof(InputStateRequest)) {
             LOG_ERROR("Invalid input state float request");
             return;
         }
 
-        const InputStateFloatRequest* state_request = reinterpret_cast<const InputStateFloatRequest*>(payload.data());
+        const InputStateRequest* state_request = reinterpret_cast<const InputStateRequest*>(payload.data());
 
         InputStateFloatResponse state_response = {};
         float value = 0.0f;
@@ -500,13 +499,12 @@ class OxService {
     }
 
     void HandleGetInputStateVector2f(const MessageHeader& request, const std::vector<uint8_t>& payload) {
-        if (payload.size() < sizeof(InputStateVector2fRequest)) {
+        if (payload.size() < sizeof(InputStateRequest)) {
             LOG_ERROR("Invalid input state vector2f request");
             return;
         }
 
-        const InputStateVector2fRequest* state_request =
-            reinterpret_cast<const InputStateVector2fRequest*>(payload.data());
+        const InputStateRequest* state_request = reinterpret_cast<const InputStateRequest*>(payload.data());
 
         InputStateVector2fResponse state_response = {};
         float x = 0.0f, y = 0.0f;

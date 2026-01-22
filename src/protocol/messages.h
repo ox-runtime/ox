@@ -122,21 +122,9 @@ struct InteractionProfilesResponse {
 };
 
 // Input state requests - separate for each type (more efficient than generic struct)
-struct InputStateBooleanRequest {
+struct InputStateRequest {
     char user_path[256];       // e.g., "/user/hand/left"
     char component_path[128];  // e.g., "/input/trigger/click"
-    int64_t predicted_time;
-};
-
-struct InputStateFloatRequest {
-    char user_path[256];       // e.g., "/user/hand/left"
-    char component_path[128];  // e.g., "/input/trigger/value"
-    int64_t predicted_time;
-};
-
-struct InputStateVector2fRequest {
-    char user_path[256];       // e.g., "/user/hand/left"
-    char component_path[128];  // e.g., "/input/thumbstick"
     int64_t predicted_time;
 };
 

@@ -237,12 +237,12 @@ inline XrResult GetActionStateBoolean(XrSession session, const XrActionStateGetI
         std::string user_path = ExtractUserPath(path_str);
         std::string component_path = ExtractComponentPath(path_str);
 
-        uint32_t value = 0;
+        XrBool32 value = XR_FALSE;
         bool available = false;
         if (ServiceConnection::Instance().GetInputStateBoolean(user_path.c_str(), component_path.c_str(), 0, value,
                                                                available)) {
             if (available) {
-                state->currentState = value ? XR_TRUE : XR_FALSE;
+                state->currentState = value;
                 state->isActive = XR_TRUE;
                 state->lastChangeTime = 0;
                 return XR_SUCCESS;
@@ -334,13 +334,13 @@ inline XrResult GetActionStateVector2f(XrSession session, const XrActionStateGet
         std::string user_path = ExtractUserPath(path_str);
         std::string component_path = ExtractComponentPath(path_str);
 
-        float x = 0.0f, y = 0.0f;
+        XrVector2f value = {0.0f, 0.0f};
         bool available = false;
-        if (ServiceConnection::Instance().GetInputStateVector2f(user_path.c_str(), component_path.c_str(), 0, x, y,
+        if (ServiceConnection::Instance().GetInputStateVector2f(user_path.c_str(), component_path.c_str(), 0, value,
                                                                 available)) {
             if (available) {
-                state->currentState.x = x;
-                state->currentState.y = y;
+                state->currentState.x = value.x;
+                state->currentState.y = value.y;
                 state->isActive = XR_TRUE;
                 state->lastChangeTime = 0;
                 return XR_SUCCESS;
