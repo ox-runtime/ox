@@ -1,5 +1,7 @@
 #pragma once
 
+#include <openxr/openxr.h>
+
 #include <atomic>
 #include <cstdint>
 
@@ -131,7 +133,7 @@ struct InputStateRequest {
 // Input state responses - only the data needed for each type
 struct InputStateBooleanResponse {
     uint32_t is_available;  // 0 = unavailable, 1 = available
-    uint32_t value;         // 0 or 1
+    XrBool32 value;         // 0 or 1
 };
 
 struct InputStateFloatResponse {
@@ -141,8 +143,7 @@ struct InputStateFloatResponse {
 
 struct InputStateVector2fResponse {
     uint32_t is_available;  // 0 = unavailable, 1 = available
-    float x;
-    float y;
+    XrVector2f value;
 };
 
 // Pose data (hot path - shared memory)

@@ -258,10 +258,9 @@ bool ServiceConnection::QueryStaticMetadata() {
     return true;
 }
 
-template <typename ResponseType>
-bool ServiceConnection::GetInputState(protocol::MessageType message_type, const char* user_path,
-                                      const char* component_path, int64_t predicted_time, ResponseType& out_response,
-                                      bool& out_available) {
+template <protocol::MessageType MsgType, typename ResponseType, typename ValueType>
+bool ServiceConnection::GetInputState(const char* user_path, const char* component_path, int64_t predicted_time,
+                                      ValueType& out_value, bool& out_available) {
     std::lock_guard<std::mutex> lock(send_mutex_);
 
     protocol::InputStateRequest request;
@@ -272,7 +271,7 @@ bool ServiceConnection::GetInputState(protocol::MessageType message_type, const 
     request.component_path[sizeof(request.component_path) - 1] = '\0';
 
     protocol::MessageHeader header;
-    header.type = message_type;
+    header.type = MsgType;
     header.sequence = sequence_++;
     header.payload_size = sizeof(request);
 
@@ -287,8 +286,10 @@ bool ServiceConnection::GetInputState(protocol::MessageType message_type, const 
     }
 
     if (response.type == protocol::MessageType::RESPONSE && response_payload.size() >= sizeof(ResponseType)) {
-        std::memcpy(&out_response, response_payload.data(), sizeof(out_response));
-        out_available = (out_response.is_available != 0);
+        ResponseType response_data;
+        std::memcpy(&response_data, response_payload.data(), sizeof(response_data));
+        out_value = response_data.value;
+        out_available = (response_data.is_available != 0);
         return true;
     }
 
@@ -297,36 +298,20 @@ bool ServiceConnection::GetInputState(protocol::MessageType message_type, const 
 
 bool ServiceConnection::GetInputStateBoolean(const char* user_path, const char* component_path, int64_t predicted_time,
                                              XrBool32& out_value, bool& out_available) {
-    protocol::InputStateBooleanResponse response;
-    if (!GetInputState(protocol::MessageType::GET_INPUT_STATE_BOOLEAN, user_path, component_path, predicted_time,
-                       response, out_available)) {
-        return false;
-    }
-    out_value = static_cast<XrBool32>(response.value);
-    return true;
+    return GetInputState<protocol::MessageType::GET_INPUT_STATE_BOOLEAN, protocol::InputStateBooleanResponse>(
+        user_path, component_path, predicted_time, out_value, out_available);
 }
 
 bool ServiceConnection::GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time,
                                            float& out_value, bool& out_available) {
-    protocol::InputStateFloatResponse response;
-    if (!GetInputState(protocol::MessageType::GET_INPUT_STATE_FLOAT, user_path, component_path, predicted_time,
-                       response, out_available)) {
-        return false;
-    }
-    out_value = response.value;
-    return true;
+    return GetInputState<protocol::MessageType::GET_INPUT_STATE_FLOAT, protocol::InputStateFloatResponse>(
+        user_path, component_path, predicted_time, out_value, out_available);
 }
 
 bool ServiceConnection::GetInputStateVector2f(const char* user_path, const char* component_path, int64_t predicted_time,
                                               XrVector2f& out_value, bool& out_available) {
-    protocol::InputStateVector2fResponse response;
-    if (!GetInputState(protocol::MessageType::GET_INPUT_STATE_VECTOR2F, user_path, component_path, predicted_time,
-                       response, out_available)) {
-        return false;
-    }
-    out_value.x = response.x;
-    out_value.y = response.y;
-    return true;
+    return GetInputState<protocol::MessageType::GET_INPUT_STATE_VECTOR2F, protocol::InputStateVector2fResponse>(
+        user_path, component_path, predicted_time, out_value, out_available);
 }
 
 }  // namespace client

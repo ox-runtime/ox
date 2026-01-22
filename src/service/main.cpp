@@ -463,7 +463,7 @@ class OxService {
         const InputStateRequest* state_request = reinterpret_cast<const InputStateRequest*>(payload.data());
 
         InputStateBooleanResponse state_response = {};
-        uint32_t value = 0;
+        XrBool32 value = 0;
         state_response.is_available = driver_.GetInputStateBoolean(
             state_request->predicted_time, state_request->user_path, state_request->component_path, &value);
         state_response.value = value;
@@ -510,8 +510,8 @@ class OxService {
         float x = 0.0f, y = 0.0f;
         state_response.is_available = driver_.GetInputStateVector2f(
             state_request->predicted_time, state_request->user_path, state_request->component_path, &x, &y);
-        state_response.x = x;
-        state_response.y = y;
+        state_response.value.x = x;
+        state_response.value.y = y;
 
         MessageHeader response;
         response.type = MessageType::RESPONSE;

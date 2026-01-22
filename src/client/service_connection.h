@@ -1,7 +1,5 @@
 #pragma once
 
-#include <openxr/openxr.h>
-
 #include <atomic>
 #include <mutex>
 
@@ -57,9 +55,9 @@ class ServiceConnection {
     bool QueryStaticMetadata();
 
     // Template implementation for input state queries
-    template <typename ResponseType>
-    bool GetInputState(protocol::MessageType message_type, const char* user_path, const char* component_path,
-                       int64_t predicted_time, ResponseType& out_response, bool& out_available);
+    template <protocol::MessageType MsgType, typename ResponseType, typename ValueType>
+    bool GetInputState(const char* user_path, const char* component_path, int64_t predicted_time, ValueType& out_value,
+                       bool& out_available);
 
     protocol::SharedMemory shared_mem_;
     protocol::ControlChannel control_;
