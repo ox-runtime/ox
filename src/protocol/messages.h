@@ -30,7 +30,9 @@ enum class MessageType : uint32_t {
     GET_SYSTEM_PROPERTIES = 11,
     GET_VIEW_CONFIGURATIONS = 12,
     GET_INTERACTION_PROFILES = 13,
-    GET_INPUT_COMPONENT_STATE = 14,
+    GET_INPUT_STATE_BOOLEAN = 14,
+    GET_INPUT_STATE_FLOAT = 15,
+    GET_INPUT_STATE_VECTOR2F = 16,
     RESPONSE = 100,
 };
 
@@ -119,16 +121,38 @@ struct InteractionProfilesResponse {
     char profiles[8][128];  // Up to 8 interaction profile paths
 };
 
-struct InputComponentStateRequest {
-    char user_path[256];       // e.g., "/user/hand/left", "/user/vive_tracker_htcx/role/waist"
+// Input state requests - separate for each type (more efficient than generic struct)
+struct InputStateBooleanRequest {
+    char user_path[256];       // e.g., "/user/hand/left"
+    char component_path[128];  // e.g., "/input/trigger/click"
+    int64_t predicted_time;
+};
+
+struct InputStateFloatRequest {
+    char user_path[256];       // e.g., "/user/hand/left"
     char component_path[128];  // e.g., "/input/trigger/value"
     int64_t predicted_time;
 };
 
-struct InputComponentStateResponse {
+struct InputStateVector2fRequest {
+    char user_path[256];       // e.g., "/user/hand/left"
+    char component_path[128];  // e.g., "/input/thumbstick"
+    int64_t predicted_time;
+};
+
+// Input state responses - only the data needed for each type
+struct InputStateBooleanResponse {
     uint32_t is_available;  // 0 = unavailable, 1 = available
-    uint32_t boolean_value;
-    float float_value;
+    uint32_t value;         // 0 or 1
+};
+
+struct InputStateFloatResponse {
+    uint32_t is_available;  // 0 = unavailable, 1 = available
+    float value;
+};
+
+struct InputStateVector2fResponse {
+    uint32_t is_available;  // 0 = unavailable, 1 = available
     float x;
     float y;
 };

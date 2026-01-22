@@ -168,19 +168,32 @@ class DriverLoader {
         return profiles;
     }
 
-    uint32_t GetInputComponentState(int64_t predicted_time, const char* user_path, const char* component_path,
-                                    uint32_t* boolean_value, float* float_value, float* x, float* y) const {
-        if (loaded_ && callbacks_.get_input_component_state) {
-            OxInputComponentState state = {};
+    uint32_t GetInputStateBoolean(int64_t predicted_time, const char* user_path, const char* component_path,
+                                  uint32_t* out_value) const {
+        if (loaded_ && callbacks_.get_input_state_boolean) {
             OxComponentResult result =
-                callbacks_.get_input_component_state(predicted_time, user_path, component_path, &state);
-            if (result == OX_COMPONENT_AVAILABLE) {
-                *boolean_value = state.boolean_value;
-                *float_value = state.float_value;
-                *x = state.x;
-                *y = state.y;
-                return 1;
-            }
+                callbacks_.get_input_state_boolean(predicted_time, user_path, component_path, out_value);
+            return (result == OX_COMPONENT_AVAILABLE) ? 1 : 0;
+        }
+        return 0;
+    }
+
+    uint32_t GetInputStateFloat(int64_t predicted_time, const char* user_path, const char* component_path,
+                                float* out_value) const {
+        if (loaded_ && callbacks_.get_input_state_float) {
+            OxComponentResult result =
+                callbacks_.get_input_state_float(predicted_time, user_path, component_path, out_value);
+            return (result == OX_COMPONENT_AVAILABLE) ? 1 : 0;
+        }
+        return 0;
+    }
+
+    uint32_t GetInputStateVector2f(int64_t predicted_time, const char* user_path, const char* component_path,
+                                   float* out_x, float* out_y) const {
+        if (loaded_ && callbacks_.get_input_state_vector2f) {
+            OxComponentResult result =
+                callbacks_.get_input_state_vector2f(predicted_time, user_path, component_path, out_x, out_y);
+            return (result == OX_COMPONENT_AVAILABLE) ? 1 : 0;
         }
         return 0;
     }

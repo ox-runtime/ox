@@ -204,51 +204,145 @@ inline bool IsBindingMatch(const BindingData& binding_data, XrAction action, XrP
     return true;
 }
 
-// Helper: Generic action state query function
-template <typename StateType, typename ValueExtractor>
-inline XrResult GetActionStateGeneric(XrSession session, const XrActionStateGetInfo* getInfo, StateType* state,
-                                      ValueExtractor extract_value) {
+// Helper: Get action state for boolean inputs
+inline XrResult GetActionStateBoolean(XrSession session, const XrActionStateGetInfo* getInfo,
+                                      XrActionStateBoolean* state) {
     if (!state || !getInfo) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
     std::lock_guard<std::mutex> lock(g_instance_mutex);
 
-    // Get instance from session
     XrInstance instance;
     XrResult result = GetInstanceFromSession(session, &instance);
     if (result != XR_SUCCESS) {
         return result;
     }
 
-    // Find the action metadata
     auto action_it = g_actions.find(getInfo->action);
     if (action_it == g_actions.end()) {
-        return XR_SUCCESS;  // Action not found, return inactive
+        return XR_SUCCESS;
     }
 
-    // Find a binding for this action + subaction path
     for (const auto& [binding_path, binding_data] : g_bindings) {
         if (!IsBindingMatch(binding_data, getInfo->action, getInfo->subactionPath)) {
             continue;
         }
 
-        // Convert binding path to string to extract user path and component path
         char binding_path_str[256];
         uint32_t len = 0;
         xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
 
-        // Extract user path and component path from binding path
         std::string path_str(binding_path_str);
         std::string user_path = ExtractUserPath(path_str);
         std::string component_path = ExtractComponentPath(path_str);
 
-        // Query the driver for component state
-        ox::protocol::InputComponentStateResponse response;
-        if (ServiceConnection::Instance().GetInputComponentState(user_path.c_str(), component_path.c_str(), 0,
-                                                                 response)) {
-            if (response.is_available) {
-                extract_value(state, response);
+        uint32_t value = 0;
+        bool available = false;
+        if (ServiceConnection::Instance().GetInputStateBoolean(user_path.c_str(), component_path.c_str(), 0, value,
+                                                               available)) {
+            if (available) {
+                state->currentState = value ? XR_TRUE : XR_FALSE;
+                state->isActive = XR_TRUE;
+                state->lastChangeTime = 0;
+                return XR_SUCCESS;
+            }
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+// Helper: Get action state for float inputs
+inline XrResult GetActionStateFloat(XrSession session, const XrActionStateGetInfo* getInfo, XrActionStateFloat* state) {
+    if (!state || !getInfo) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    XrInstance instance;
+    XrResult result = GetInstanceFromSession(session, &instance);
+    if (result != XR_SUCCESS) {
+        return result;
+    }
+
+    auto action_it = g_actions.find(getInfo->action);
+    if (action_it == g_actions.end()) {
+        return XR_SUCCESS;
+    }
+
+    for (const auto& [binding_path, binding_data] : g_bindings) {
+        if (!IsBindingMatch(binding_data, getInfo->action, getInfo->subactionPath)) {
+            continue;
+        }
+
+        char binding_path_str[256];
+        uint32_t len = 0;
+        xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+
+        std::string path_str(binding_path_str);
+        std::string user_path = ExtractUserPath(path_str);
+        std::string component_path = ExtractComponentPath(path_str);
+
+        float value = 0.0f;
+        bool available = false;
+        if (ServiceConnection::Instance().GetInputStateFloat(user_path.c_str(), component_path.c_str(), 0, value,
+                                                             available)) {
+            if (available) {
+                state->currentState = value;
+                state->isActive = XR_TRUE;
+                state->lastChangeTime = 0;
+                return XR_SUCCESS;
+            }
+        }
+    }
+
+    return XR_SUCCESS;
+}
+
+// Helper: Get action state for Vector2f inputs
+inline XrResult GetActionStateVector2f(XrSession session, const XrActionStateGetInfo* getInfo,
+                                       XrActionStateVector2f* state) {
+    if (!state || !getInfo) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instance_mutex);
+
+    XrInstance instance;
+    XrResult result = GetInstanceFromSession(session, &instance);
+    if (result != XR_SUCCESS) {
+        return result;
+    }
+
+    auto action_it = g_actions.find(getInfo->action);
+    if (action_it == g_actions.end()) {
+        return XR_SUCCESS;
+    }
+
+    for (const auto& [binding_path, binding_data] : g_bindings) {
+        if (!IsBindingMatch(binding_data, getInfo->action, getInfo->subactionPath)) {
+            continue;
+        }
+
+        char binding_path_str[256];
+        uint32_t len = 0;
+        xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+
+        std::string path_str(binding_path_str);
+        std::string user_path = ExtractUserPath(path_str);
+        std::string component_path = ExtractComponentPath(path_str);
+
+        float x = 0.0f, y = 0.0f;
+        bool available = false;
+        if (ServiceConnection::Instance().GetInputStateVector2f(user_path.c_str(), component_path.c_str(), 0, x, y,
+                                                                available)) {
+            if (available) {
+                state->currentState.x = x;
+                state->currentState.y = y;
+                state->isActive = XR_TRUE;
+                state->lastChangeTime = 0;
                 return XR_SUCCESS;
             }
         }
@@ -1191,12 +1285,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateBoolean(XrSession session, const 
     state->lastChangeTime = 0;
     state->isActive = XR_FALSE;
 
-    return GetActionStateGeneric(session, getInfo, state,
-                                 [](XrActionStateBoolean* s, const ox::protocol::InputComponentStateResponse& r) {
-                                     s->currentState = r.boolean_value ? XR_TRUE : XR_FALSE;
-                                     s->isActive = XR_TRUE;
-                                     s->lastChangeTime = 0;  // TODO: track actual change time
-                                 });
+    return GetActionStateBoolean(session, getInfo, state);
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateFloat(XrSession session, const XrActionStateGetInfo* getInfo,
@@ -1209,12 +1298,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateFloat(XrSession session, const Xr
     state->lastChangeTime = 0;
     state->isActive = XR_FALSE;
 
-    return GetActionStateGeneric(session, getInfo, state,
-                                 [](XrActionStateFloat* s, const ox::protocol::InputComponentStateResponse& r) {
-                                     s->currentState = r.float_value;
-                                     s->isActive = XR_TRUE;
-                                     s->lastChangeTime = 0;  // TODO: track actual change time
-                                 });
+    return GetActionStateFloat(session, getInfo, state);
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateVector2f(XrSession session, const XrActionStateGetInfo* getInfo,
@@ -1228,13 +1312,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStateVector2f(XrSession session, const
     state->lastChangeTime = 0;
     state->isActive = XR_FALSE;
 
-    return GetActionStateGeneric(session, getInfo, state,
-                                 [](XrActionStateVector2f* s, const ox::protocol::InputComponentStateResponse& r) {
-                                     s->currentState.x = r.x;
-                                     s->currentState.y = r.y;
-                                     s->isActive = XR_TRUE;
-                                     s->lastChangeTime = 0;  // TODO: track actual change time
-                                 });
+    return GetActionStateVector2f(session, getInfo, state);
 }
 
 XRAPI_ATTR XrResult XRAPI_CALL xrGetActionStatePose(XrSession session, const XrActionStateGetInfo* getInfo,

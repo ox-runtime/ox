@@ -258,24 +258,19 @@ bool ServiceConnection::QueryStaticMetadata() {
     return true;
 }
 
-bool ServiceConnection::GetInputComponentState(const char* user_path, const char* component_path,
-                                               int64_t predicted_time,
-                                               protocol::InputComponentStateResponse& out_response) {
+bool ServiceConnection::GetInputStateBoolean(const char* user_path, const char* component_path, int64_t predicted_time,
+                                             uint32_t& out_value, bool& out_available) {
     std::lock_guard<std::mutex> lock(send_mutex_);
 
-    protocol::InputComponentStateRequest request;
+    protocol::InputStateBooleanRequest request;
     request.predicted_time = predicted_time;
-
-    // Copy user path safely
     std::strncpy(request.user_path, user_path, sizeof(request.user_path) - 1);
     request.user_path[sizeof(request.user_path) - 1] = '\0';
-
-    // Copy component path safely
     std::strncpy(request.component_path, component_path, sizeof(request.component_path) - 1);
     request.component_path[sizeof(request.component_path) - 1] = '\0';
 
     protocol::MessageHeader header;
-    header.type = protocol::MessageType::GET_INPUT_COMPONENT_STATE;
+    header.type = protocol::MessageType::GET_INPUT_STATE_BOOLEAN;
     header.sequence = sequence_++;
     header.payload_size = sizeof(request);
 
@@ -283,17 +278,95 @@ bool ServiceConnection::GetInputComponentState(const char* user_path, const char
         return false;
     }
 
-    // Wait for response
     protocol::MessageHeader response;
     std::vector<uint8_t> response_payload;
-
     if (!control_.Receive(response, response_payload)) {
         return false;
     }
 
     if (response.type == protocol::MessageType::RESPONSE &&
-        response_payload.size() >= sizeof(protocol::InputComponentStateResponse)) {
-        std::memcpy(&out_response, response_payload.data(), sizeof(out_response));
+        response_payload.size() >= sizeof(protocol::InputStateBooleanResponse)) {
+        protocol::InputStateBooleanResponse state_response;
+        std::memcpy(&state_response, response_payload.data(), sizeof(state_response));
+        out_available = (state_response.is_available != 0);
+        out_value = state_response.value;
+        return true;
+    }
+
+    return false;
+}
+
+bool ServiceConnection::GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time,
+                                           float& out_value, bool& out_available) {
+    std::lock_guard<std::mutex> lock(send_mutex_);
+
+    protocol::InputStateFloatRequest request;
+    request.predicted_time = predicted_time;
+    std::strncpy(request.user_path, user_path, sizeof(request.user_path) - 1);
+    request.user_path[sizeof(request.user_path) - 1] = '\0';
+    std::strncpy(request.component_path, component_path, sizeof(request.component_path) - 1);
+    request.component_path[sizeof(request.component_path) - 1] = '\0';
+
+    protocol::MessageHeader header;
+    header.type = protocol::MessageType::GET_INPUT_STATE_FLOAT;
+    header.sequence = sequence_++;
+    header.payload_size = sizeof(request);
+
+    if (!control_.Send(header, &request)) {
+        return false;
+    }
+
+    protocol::MessageHeader response;
+    std::vector<uint8_t> response_payload;
+    if (!control_.Receive(response, response_payload)) {
+        return false;
+    }
+
+    if (response.type == protocol::MessageType::RESPONSE &&
+        response_payload.size() >= sizeof(protocol::InputStateFloatResponse)) {
+        protocol::InputStateFloatResponse state_response;
+        std::memcpy(&state_response, response_payload.data(), sizeof(state_response));
+        out_available = (state_response.is_available != 0);
+        out_value = state_response.value;
+        return true;
+    }
+
+    return false;
+}
+
+bool ServiceConnection::GetInputStateVector2f(const char* user_path, const char* component_path, int64_t predicted_time,
+                                              float& out_x, float& out_y, bool& out_available) {
+    std::lock_guard<std::mutex> lock(send_mutex_);
+
+    protocol::InputStateVector2fRequest request;
+    request.predicted_time = predicted_time;
+    std::strncpy(request.user_path, user_path, sizeof(request.user_path) - 1);
+    request.user_path[sizeof(request.user_path) - 1] = '\0';
+    std::strncpy(request.component_path, component_path, sizeof(request.component_path) - 1);
+    request.component_path[sizeof(request.component_path) - 1] = '\0';
+
+    protocol::MessageHeader header;
+    header.type = protocol::MessageType::GET_INPUT_STATE_VECTOR2F;
+    header.sequence = sequence_++;
+    header.payload_size = sizeof(request);
+
+    if (!control_.Send(header, &request)) {
+        return false;
+    }
+
+    protocol::MessageHeader response;
+    std::vector<uint8_t> response_payload;
+    if (!control_.Receive(response, response_payload)) {
+        return false;
+    }
+
+    if (response.type == protocol::MessageType::RESPONSE &&
+        response_payload.size() >= sizeof(protocol::InputStateVector2fResponse)) {
+        protocol::InputStateVector2fResponse state_response;
+        std::memcpy(&state_response, response_payload.data(), sizeof(state_response));
+        out_available = (state_response.is_available != 0);
+        out_x = state_response.x;
+        out_y = state_response.y;
         return true;
     }
 

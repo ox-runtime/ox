@@ -294,8 +294,14 @@ class OxService {
                 case MessageType::GET_INTERACTION_PROFILES:
                     HandleGetInteractionProfiles(header);
                     break;
-                case MessageType::GET_INPUT_COMPONENT_STATE:
-                    HandleGetInputComponentState(header, payload);
+                case MessageType::GET_INPUT_STATE_BOOLEAN:
+                    HandleGetInputStateBoolean(header, payload);
+                    break;
+                case MessageType::GET_INPUT_STATE_FLOAT:
+                    HandleGetInputStateFloat(header, payload);
+                    break;
+                case MessageType::GET_INPUT_STATE_VECTOR2F:
+                    HandleGetInputStateVector2f(header, payload);
                     break;
                 default:
                     LOG_ERROR("Unknown message type");
@@ -448,27 +454,73 @@ class OxService {
         LOG_DEBUG("Sent interaction profiles");
     }
 
-    void HandleGetInputComponentState(const MessageHeader& request, const std::vector<uint8_t>& payload) {
-        if (payload.size() < sizeof(InputComponentStateRequest)) {
-            LOG_ERROR("Invalid input component state request");
+    void HandleGetInputStateBoolean(const MessageHeader& request, const std::vector<uint8_t>& payload) {
+        if (payload.size() < sizeof(InputStateBooleanRequest)) {
+            LOG_ERROR("Invalid input state boolean request");
             return;
         }
 
-        const InputComponentStateRequest* component_request =
-            reinterpret_cast<const InputComponentStateRequest*>(payload.data());
+        const InputStateBooleanRequest* state_request =
+            reinterpret_cast<const InputStateBooleanRequest*>(payload.data());
 
-        InputComponentStateResponse component_response = {};
-        component_response.is_available = driver_.GetInputComponentState(
-            component_request->predicted_time, component_request->user_path, component_request->component_path,
-            &component_response.boolean_value, &component_response.float_value, &component_response.x,
-            &component_response.y);
+        InputStateBooleanResponse state_response = {};
+        uint32_t value = 0;
+        state_response.is_available = driver_.GetInputStateBoolean(
+            state_request->predicted_time, state_request->user_path, state_request->component_path, &value);
+        state_response.value = value;
 
         MessageHeader response;
         response.type = MessageType::RESPONSE;
         response.sequence = request.sequence;
-        response.payload_size = sizeof(component_response);
-        control_.Send(response, &component_response);
-        LOG_DEBUG("Sent input component state");
+        response.payload_size = sizeof(state_response);
+        control_.Send(response, &state_response);
+        LOG_DEBUG("Sent input state boolean");
+    }
+
+    void HandleGetInputStateFloat(const MessageHeader& request, const std::vector<uint8_t>& payload) {
+        if (payload.size() < sizeof(InputStateFloatRequest)) {
+            LOG_ERROR("Invalid input state float request");
+            return;
+        }
+
+        const InputStateFloatRequest* state_request = reinterpret_cast<const InputStateFloatRequest*>(payload.data());
+
+        InputStateFloatResponse state_response = {};
+        float value = 0.0f;
+        state_response.is_available = driver_.GetInputStateFloat(
+            state_request->predicted_time, state_request->user_path, state_request->component_path, &value);
+        state_response.value = value;
+
+        MessageHeader response;
+        response.type = MessageType::RESPONSE;
+        response.sequence = request.sequence;
+        response.payload_size = sizeof(state_response);
+        control_.Send(response, &state_response);
+        LOG_DEBUG("Sent input state float");
+    }
+
+    void HandleGetInputStateVector2f(const MessageHeader& request, const std::vector<uint8_t>& payload) {
+        if (payload.size() < sizeof(InputStateVector2fRequest)) {
+            LOG_ERROR("Invalid input state vector2f request");
+            return;
+        }
+
+        const InputStateVector2fRequest* state_request =
+            reinterpret_cast<const InputStateVector2fRequest*>(payload.data());
+
+        InputStateVector2fResponse state_response = {};
+        float x = 0.0f, y = 0.0f;
+        state_response.is_available = driver_.GetInputStateVector2f(
+            state_request->predicted_time, state_request->user_path, state_request->component_path, &x, &y);
+        state_response.x = x;
+        state_response.y = y;
+
+        MessageHeader response;
+        response.type = MessageType::RESPONSE;
+        response.sequence = request.sequence;
+        response.payload_size = sizeof(state_response);
+        control_.Send(response, &state_response);
+        LOG_DEBUG("Sent input state vector2f");
     }
 
     void FrameLoop() {

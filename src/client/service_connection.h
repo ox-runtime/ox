@@ -40,9 +40,13 @@ class ServiceConnection {
     const protocol::ViewConfigurationsResponse& GetViewConfigurations() const { return view_configs_; }
     const protocol::InteractionProfilesResponse& GetInteractionProfiles() const { return interaction_profiles_; }
 
-    // Query input component state from driver
-    bool GetInputComponentState(const char* user_path, const char* component_path, int64_t predicted_time,
-                                protocol::InputComponentStateResponse& out_response);
+    // Query input state from driver - type-specific calls
+    bool GetInputStateBoolean(const char* user_path, const char* component_path, int64_t predicted_time,
+                              uint32_t& out_value, bool& out_available);
+    bool GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time, float& out_value,
+                            bool& out_available);
+    bool GetInputStateVector2f(const char* user_path, const char* component_path, int64_t predicted_time, float& out_x,
+                               float& out_y, bool& out_available);
 
    private:
     ServiceConnection() : shared_data_(nullptr), connected_(false), sequence_(0) {}

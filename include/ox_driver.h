@@ -82,19 +82,6 @@ typedef enum {
     OX_COMPONENT_AVAILABLE = 1,    // Component exists and state is valid
 } OxComponentResult;
 
-// Input component state - generic for all component types
-typedef struct {
-    // Boolean state (for /click, /touch components)
-    uint32_t boolean_value;  // 0 or 1
-
-    // Float state (for /value, /force components)
-    float float_value;  // 0.0 to 1.0
-
-    // Vector2 state (for thumbstick/trackpad x/y)
-    float x;  // -1.0 to 1.0
-    float y;  // -1.0 to 1.0
-} OxInputComponentState;
-
 // Driver callbacks - implement these in your driver
 struct OxDriverCallbacks {
     // ========== Lifecycle ==========
@@ -141,26 +128,36 @@ struct OxDriverCallbacks {
     // This callback is optional - set to NULL if no tracked devices are supported
     void (*update_devices)(int64_t predicted_time, OxDeviceState* out_states, uint32_t* out_count);
 
-    // Get input component state for a device
+    // Get boolean input state (for /click, /touch components)
     // predicted_time: nanoseconds since epoch
-    // user_path: OpenXR user path (e.g., "/user/hand/left", "/user/vive_tracker_htcx/role/waist")
-    // component_path: OpenXR component path (e.g., "/input/trigger/value", "/input/a/click", "/input/thumbstick")
-    // out_state: write the component state here
+    // user_path: OpenXR user path (e.g., "/user/hand/left")
+    // component_path: OpenXR component path (e.g., "/input/trigger/click", "/input/a/touch")
+    // out_value: write the boolean value here (0 or 1)
     // Returns: OX_COMPONENT_AVAILABLE if component exists, OX_COMPONENT_UNAVAILABLE otherwise
-    //
-    // Example component paths:
-    //   "/input/trigger/value"      -> float_value (0.0 to 1.0)
-    //   "/input/trigger/click"      -> boolean_value (0 or 1)
-    //   "/input/a/click"            -> boolean_value
-    //   "/input/a/touch"            -> boolean_value
-    //   "/input/squeeze/value"      -> float_value
-    //   "/input/thumbstick"         -> x, y (-1.0 to 1.0)
-    //   "/input/thumbstick/x"       -> float_value (-1.0 to 1.0)
-    //   "/input/thumbstick/click"   -> boolean_value
-    //
     // This callback is optional - set to NULL if devices are not supported
-    OxComponentResult (*get_input_component_state)(int64_t predicted_time, const char* user_path,
-                                                   const char* component_path, OxInputComponentState* out_state);
+    OxComponentResult (*get_input_state_boolean)(int64_t predicted_time, const char* user_path,
+                                                 const char* component_path, uint32_t* out_value);
+
+    // Get float input state (for /value, /force components)
+    // predicted_time: nanoseconds since epoch
+    // user_path: OpenXR user path (e.g., "/user/hand/left")
+    // component_path: OpenXR component path (e.g., "/input/trigger/value", "/input/squeeze/value")
+    // out_value: write the float value here (typically 0.0 to 1.0)
+    // Returns: OX_COMPONENT_AVAILABLE if component exists, OX_COMPONENT_UNAVAILABLE otherwise
+    // This callback is optional - set to NULL if devices are not supported
+    OxComponentResult (*get_input_state_float)(int64_t predicted_time, const char* user_path,
+                                               const char* component_path, float* out_value);
+
+    // Get Vector2f input state (for thumbstick/trackpad)
+    // predicted_time: nanoseconds since epoch
+    // user_path: OpenXR user path (e.g., "/user/hand/left")
+    // component_path: OpenXR component path (e.g., "/input/thumbstick", "/input/trackpad")
+    // out_x: write x value here (-1.0 to 1.0)
+    // out_y: write y value here (-1.0 to 1.0)
+    // Returns: OX_COMPONENT_AVAILABLE if component exists, OX_COMPONENT_UNAVAILABLE otherwise
+    // This callback is optional - set to NULL if devices are not supported
+    OxComponentResult (*get_input_state_vector2f)(int64_t predicted_time, const char* user_path,
+                                                  const char* component_path, float* out_x, float* out_y);
 
     // ========== Interaction Profiles (Optional) ==========
 
