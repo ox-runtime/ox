@@ -42,11 +42,11 @@ class ServiceConnection {
 
     // Query input state from driver - type-specific calls
     bool GetInputStateBoolean(const char* user_path, const char* component_path, int64_t predicted_time,
-                              XrBool32& out_value, bool& out_available);
-    bool GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time, float& out_value,
-                            bool& out_available);
+                              XrBool32& out_value);
+    bool GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time,
+                            float& out_value);
     bool GetInputStateVector2f(const char* user_path, const char* component_path, int64_t predicted_time,
-                               XrVector2f& out_value, bool& out_available);
+                               XrVector2f& out_value);
 
    private:
     ServiceConnection() : shared_data_(nullptr), connected_(false), sequence_(0) {}
@@ -56,8 +56,7 @@ class ServiceConnection {
 
     // Template implementation for input state queries
     template <protocol::MessageType MsgType, typename ResponseType, typename ValueType>
-    bool GetInputState(const char* user_path, const char* component_path, int64_t predicted_time, ValueType& out_value,
-                       bool& out_available);
+    bool GetInputState(const char* user_path, const char* component_path, int64_t predicted_time, ValueType& out_value);
 
     protocol::SharedMemory shared_mem_;
     protocol::ControlChannel control_;

@@ -260,9 +260,10 @@ bool ServiceConnection::QueryStaticMetadata() {
 
 template <protocol::MessageType MsgType, typename ResponseType, typename ValueType>
 bool ServiceConnection::GetInputState(const char* user_path, const char* component_path, int64_t predicted_time,
-                                      ValueType& out_value, bool& out_available) {
+                                      ValueType& out_value) {
     std::lock_guard<std::mutex> lock(send_mutex_);
 
+    // Prepare the request
     protocol::InputStateRequest request;
     request.predicted_time = predicted_time;
     std::strncpy(request.user_path, user_path, sizeof(request.user_path) - 1);
@@ -275,21 +276,23 @@ bool ServiceConnection::GetInputState(const char* user_path, const char* compone
     header.sequence = sequence_++;
     header.payload_size = sizeof(request);
 
+    // Send the request
     if (!control_.Send(header, &request)) {
         return false;
     }
 
+    // Wait for response
     protocol::MessageHeader response;
     std::vector<uint8_t> response_payload;
     if (!control_.Receive(response, response_payload)) {
         return false;
     }
 
+    // Read the response
     if (response.type == protocol::MessageType::RESPONSE && response_payload.size() >= sizeof(ResponseType)) {
         ResponseType response_data;
         std::memcpy(&response_data, response_payload.data(), sizeof(response_data));
         out_value = response_data.value;
-        out_available = (response_data.is_available != 0);
         return true;
     }
 
@@ -297,21 +300,21 @@ bool ServiceConnection::GetInputState(const char* user_path, const char* compone
 }
 
 bool ServiceConnection::GetInputStateBoolean(const char* user_path, const char* component_path, int64_t predicted_time,
-                                             XrBool32& out_value, bool& out_available) {
+                                             XrBool32& out_value) {
     return GetInputState<protocol::MessageType::GET_INPUT_STATE_BOOLEAN, protocol::InputStateBooleanResponse>(
-        user_path, component_path, predicted_time, out_value, out_available);
+        user_path, component_path, predicted_time, out_value);
 }
 
 bool ServiceConnection::GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time,
-                                           float& out_value, bool& out_available) {
+                                           float& out_value) {
     return GetInputState<protocol::MessageType::GET_INPUT_STATE_FLOAT, protocol::InputStateFloatResponse>(
-        user_path, component_path, predicted_time, out_value, out_available);
+        user_path, component_path, predicted_time, out_value);
 }
 
 bool ServiceConnection::GetInputStateVector2f(const char* user_path, const char* component_path, int64_t predicted_time,
-                                              XrVector2f& out_value, bool& out_available) {
+                                              XrVector2f& out_value) {
     return GetInputState<protocol::MessageType::GET_INPUT_STATE_VECTOR2F, protocol::InputStateVector2fResponse>(
-        user_path, component_path, predicted_time, out_value, out_available);
+        user_path, component_path, predicted_time, out_value);
 }
 
 }  // namespace client
