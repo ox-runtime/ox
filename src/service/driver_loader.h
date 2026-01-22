@@ -191,9 +191,14 @@ class DriverLoader {
     uint32_t GetInputStateVector2f(int64_t predicted_time, const char* user_path, const char* component_path,
                                    float* out_x, float* out_y) const {
         if (loaded_ && callbacks_.get_input_state_vector2f) {
+            OxVector2f vec;
             OxComponentResult result =
-                callbacks_.get_input_state_vector2f(predicted_time, user_path, component_path, out_x, out_y);
-            return (result == OX_COMPONENT_AVAILABLE) ? 1 : 0;
+                callbacks_.get_input_state_vector2f(predicted_time, user_path, component_path, &vec);
+            if (result == OX_COMPONENT_AVAILABLE) {
+                *out_x = vec.x;
+                *out_y = vec.y;
+                return 1;
+            }
         }
         return 0;
     }

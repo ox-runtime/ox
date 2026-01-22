@@ -18,6 +18,11 @@ extern "C" {
 // Forward declarations
 typedef struct OxDriverCallbacks OxDriverCallbacks;
 
+// 2D position vector (for input components)
+typedef struct {
+    float x, y;
+} OxVector2f;
+
 // 3D position vector
 typedef struct {
     float x, y, z;
@@ -152,12 +157,11 @@ struct OxDriverCallbacks {
     // predicted_time: nanoseconds since epoch
     // user_path: OpenXR user path (e.g., "/user/hand/left")
     // component_path: OpenXR component path (e.g., "/input/thumbstick", "/input/trackpad")
-    // out_x: write x value here (-1.0 to 1.0)
-    // out_y: write y value here (-1.0 to 1.0)
+    // out_value: write the Vector2f value here ({x, y})
     // Returns: OX_COMPONENT_AVAILABLE if component exists, OX_COMPONENT_UNAVAILABLE otherwise
     // This callback is optional - set to NULL if devices are not supported
     OxComponentResult (*get_input_state_vector2f)(int64_t predicted_time, const char* user_path,
-                                                  const char* component_path, float* out_x, float* out_y);
+                                                  const char* component_path, OxVector2f* out_value);
 
     // ========== Interaction Profiles (Optional) ==========
 
