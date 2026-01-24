@@ -561,24 +561,24 @@ class OxService {
 
         // Left eye
         driver_.UpdateViewPose(predicted_time, 0, &view_pose);
-        frame.views[0].pose.position[0] = view_pose.position.x;
-        frame.views[0].pose.position[1] = view_pose.position.y;
-        frame.views[0].pose.position[2] = view_pose.position.z;
-        frame.views[0].pose.orientation[0] = view_pose.orientation.x;
-        frame.views[0].pose.orientation[1] = view_pose.orientation.y;
-        frame.views[0].pose.orientation[2] = view_pose.orientation.z;
-        frame.views[0].pose.orientation[3] = view_pose.orientation.w;
+        frame.views[0].pose.pose.position.x = view_pose.position.x;
+        frame.views[0].pose.pose.position.y = view_pose.position.y;
+        frame.views[0].pose.pose.position.z = view_pose.position.z;
+        frame.views[0].pose.pose.orientation.x = view_pose.orientation.x;
+        frame.views[0].pose.pose.orientation.y = view_pose.orientation.y;
+        frame.views[0].pose.pose.orientation.z = view_pose.orientation.z;
+        frame.views[0].pose.pose.orientation.w = view_pose.orientation.w;
         frame.views[0].pose.timestamp = predicted_time;
 
         // Right eye
         driver_.UpdateViewPose(predicted_time, 1, &view_pose);
-        frame.views[1].pose.position[0] = view_pose.position.x;
-        frame.views[1].pose.position[1] = view_pose.position.y;
-        frame.views[1].pose.position[2] = view_pose.position.z;
-        frame.views[1].pose.orientation[0] = view_pose.orientation.x;
-        frame.views[1].pose.orientation[1] = view_pose.orientation.y;
-        frame.views[1].pose.orientation[2] = view_pose.orientation.z;
-        frame.views[1].pose.orientation[3] = view_pose.orientation.w;
+        frame.views[1].pose.pose.position.x = view_pose.position.x;
+        frame.views[1].pose.pose.position.y = view_pose.position.y;
+        frame.views[1].pose.pose.position.z = view_pose.position.z;
+        frame.views[1].pose.pose.orientation.x = view_pose.orientation.x;
+        frame.views[1].pose.pose.orientation.y = view_pose.orientation.y;
+        frame.views[1].pose.pose.orientation.z = view_pose.orientation.z;
+        frame.views[1].pose.pose.orientation.w = view_pose.orientation.w;
         frame.views[1].pose.timestamp = predicted_time;
 
         // Get FOV from driver
@@ -606,13 +606,13 @@ class OxService {
                              sizeof(frame.device_poses[i].user_path) - 1);
                 frame.device_poses[i].user_path[sizeof(frame.device_poses[i].user_path) - 1] = '\0';
 
-                frame.device_poses[i].pose.position[0] = devices[i].pose.position.x;
-                frame.device_poses[i].pose.position[1] = devices[i].pose.position.y;
-                frame.device_poses[i].pose.position[2] = devices[i].pose.position.z;
-                frame.device_poses[i].pose.orientation[0] = devices[i].pose.orientation.x;
-                frame.device_poses[i].pose.orientation[1] = devices[i].pose.orientation.y;
-                frame.device_poses[i].pose.orientation[2] = devices[i].pose.orientation.z;
-                frame.device_poses[i].pose.orientation[3] = devices[i].pose.orientation.w;
+                frame.device_poses[i].pose.pose.position.x = devices[i].pose.position.x;
+                frame.device_poses[i].pose.pose.position.y = devices[i].pose.position.y;
+                frame.device_poses[i].pose.pose.position.z = devices[i].pose.position.z;
+                frame.device_poses[i].pose.pose.orientation.x = devices[i].pose.orientation.x;
+                frame.device_poses[i].pose.pose.orientation.y = devices[i].pose.orientation.y;
+                frame.device_poses[i].pose.pose.orientation.z = devices[i].pose.orientation.z;
+                frame.device_poses[i].pose.pose.orientation.w = devices[i].pose.orientation.w;
                 frame.device_poses[i].pose.timestamp = predicted_time;
                 frame.device_poses[i].pose.flags.store(devices[i].is_active, std::memory_order_release);
                 frame.device_poses[i].is_active = devices[i].is_active;

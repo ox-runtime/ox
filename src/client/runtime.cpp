@@ -874,14 +874,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
                     XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
                     XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT | XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
 
-                location->pose.position.x = device_data.pose.position[0];
-                location->pose.position.y = device_data.pose.position[1];
-                location->pose.position.z = device_data.pose.position[2];
-
-                location->pose.orientation.x = device_data.pose.orientation[0];
-                location->pose.orientation.y = device_data.pose.orientation[1];
-                location->pose.orientation.z = device_data.pose.orientation[2];
-                location->pose.orientation.w = device_data.pose.orientation[3];
+                location->pose = device_data.pose.pose;
             } else {
                 // Device not active
                 location->locationFlags = 0;
@@ -976,14 +969,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLoca
 
             auto& view_data = shared_data->fields.frame_state.views[i];
 
-            views[i].pose.position.x = view_data.pose.position[0];
-            views[i].pose.position.y = view_data.pose.position[1];
-            views[i].pose.position.z = view_data.pose.position[2];
-
-            views[i].pose.orientation.x = view_data.pose.orientation[0];
-            views[i].pose.orientation.y = view_data.pose.orientation[1];
-            views[i].pose.orientation.z = view_data.pose.orientation[2];
-            views[i].pose.orientation.w = view_data.pose.orientation[3];
+            views[i].pose = view_data.pose.pose;
 
             views[i].fov.angleLeft = view_data.fov[0];
             views[i].fov.angleRight = view_data.fov[1];

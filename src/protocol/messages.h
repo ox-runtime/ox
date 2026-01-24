@@ -147,12 +147,12 @@ struct InputStateVector2fResponse {
 };
 
 // Pose data (hot path - shared memory)
+// Using XrPosef from OpenXR SDK to avoid custom structs
 struct alignas(64) Pose {
-    float position[3];
-    float orientation[4];  // Quaternion (x, y, z, w)
+    XrPosef pose;  // Standard OpenXR pose (orientation + position)
     uint64_t timestamp;
     std::atomic<uint32_t> flags;
-    uint32_t padding;
+    uint32_t padding[3];  // Maintain 64-byte alignment
 };
 
 // Device pose data (controllers, trackers, etc.)
