@@ -342,7 +342,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreateInfo* crea
         return XR_ERROR_RUNTIME_FAILURE;
     }
 
-    XrInstance newInstance = (XrInstance)(uintptr_t)handle;
+    XrInstance newInstance = reinterpret_cast<XrInstance>(handle);
     g_instances[newInstance] = true;
     *instance = newInstance;
 
@@ -405,10 +405,10 @@ XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffe
     // Get next event from service
     SessionStateEvent service_event;
     if (ServiceConnection::Instance().GetNextEvent(service_event)) {
-        XrEventDataSessionStateChanged* stateEvent = (XrEventDataSessionStateChanged*)eventData;
+        XrEventDataSessionStateChanged* stateEvent = reinterpret_cast<XrEventDataSessionStateChanged*>(eventData);
         stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
         stateEvent->next = nullptr;
-        stateEvent->session = (XrSession)(uintptr_t)service_event.session_handle;
+        stateEvent->session = reinterpret_cast<XrSession>(service_event.session_handle);
         stateEvent->time = service_event.timestamp;
 
         // Convert service SessionState to XrSessionState
@@ -747,7 +747,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
     }
 
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    XrSession newSession = (XrSession)(uintptr_t)handle;
+    XrSession newSession = reinterpret_cast<XrSession>(handle);
     g_sessions[newSession] = instance;
     *session = newSession;
 
@@ -815,7 +815,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session, const X
         LOG_ERROR("Failed to allocate space handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
-    XrSpace newSpace = (XrSpace)(uintptr_t)handle;
+    XrSpace newSpace = reinterpret_cast<XrSpace>(handle);
     g_spaces[newSpace] = session;
     *space = newSpace;
 
@@ -993,7 +993,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance, const XrAc
         LOG_ERROR("Failed to allocate action set handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
-    *actionSet = (XrActionSet)(uintptr_t)handle;
+    *actionSet = reinterpret_cast<XrActionSet>(handle);
     return XR_SUCCESS;
 }
 
@@ -1013,7 +1013,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrAct
         LOG_ERROR("Failed to allocate action handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
-    *action = (XrAction)(uintptr_t)handle;
+    *action = reinterpret_cast<XrAction>(handle);
 
     // Store action metadata
     std::lock_guard<std::mutex> lock(g_instance_mutex);
@@ -1235,7 +1235,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSpace(XrSession session, const XrAc
         LOG_ERROR("Failed to allocate action space handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
-    XrSpace newSpace = (XrSpace)(uintptr_t)handle;
+    XrSpace newSpace = reinterpret_cast<XrSpace>(handle);
     g_spaces[newSpace] = session;
 
     // Store action space metadata
@@ -1341,7 +1341,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
         LOG_ERROR("Failed to allocate swapchain handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
-    *swapchain = (XrSwapchain)(uintptr_t)handle;
+    *swapchain = reinterpret_cast<XrSwapchain>(handle);
 
     // Store swapchain data for later texture creation
     std::lock_guard<std::mutex> lock(g_instance_mutex);
@@ -1474,7 +1474,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrStringToPath(XrInstance instance, const char* p
         *path = it->second;
     } else {
         // Create new path using hash
-        *path = (XrPath)std::hash<std::string>{}(pathString);
+        *path = static_cast<XrPath>(std::hash<std::string>{}(pathString));
         g_path_to_string[*path] = path_str;
         g_string_to_path[path_str] = *path;
     }
@@ -1561,64 +1561,78 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
 
 // Function map initialization
 static void InitializeFunctionMap() {
-    g_clientFunctionMap["xrEnumerateApiLayerProperties"] = (PFN_xrVoidFunction)xrEnumerateApiLayerProperties;
+    g_clientFunctionMap["xrEnumerateApiLayerProperties"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateApiLayerProperties);
     g_clientFunctionMap["xrEnumerateInstanceExtensionProperties"] =
-        (PFN_xrVoidFunction)xrEnumerateInstanceExtensionProperties;
-    g_clientFunctionMap["xrCreateInstance"] = (PFN_xrVoidFunction)xrCreateInstance;
-    g_clientFunctionMap["xrDestroyInstance"] = (PFN_xrVoidFunction)xrDestroyInstance;
-    g_clientFunctionMap["xrGetInstanceProperties"] = (PFN_xrVoidFunction)xrGetInstanceProperties;
-    g_clientFunctionMap["xrPollEvent"] = (PFN_xrVoidFunction)xrPollEvent;
-    g_clientFunctionMap["xrResultToString"] = (PFN_xrVoidFunction)xrResultToString;
-    g_clientFunctionMap["xrStructureTypeToString"] = (PFN_xrVoidFunction)xrStructureTypeToString;
-    g_clientFunctionMap["xrGetSystem"] = (PFN_xrVoidFunction)xrGetSystem;
-    g_clientFunctionMap["xrGetSystemProperties"] = (PFN_xrVoidFunction)xrGetSystemProperties;
-    g_clientFunctionMap["xrEnumerateViewConfigurations"] = (PFN_xrVoidFunction)xrEnumerateViewConfigurations;
-    g_clientFunctionMap["xrGetViewConfigurationProperties"] = (PFN_xrVoidFunction)xrGetViewConfigurationProperties;
-    g_clientFunctionMap["xrEnumerateViewConfigurationViews"] = (PFN_xrVoidFunction)xrEnumerateViewConfigurationViews;
-    g_clientFunctionMap["xrEnumerateEnvironmentBlendModes"] = (PFN_xrVoidFunction)xrEnumerateEnvironmentBlendModes;
-    g_clientFunctionMap["xrCreateSession"] = (PFN_xrVoidFunction)xrCreateSession;
-    g_clientFunctionMap["xrDestroySession"] = (PFN_xrVoidFunction)xrDestroySession;
-    g_clientFunctionMap["xrBeginSession"] = (PFN_xrVoidFunction)xrBeginSession;
-    g_clientFunctionMap["xrEndSession"] = (PFN_xrVoidFunction)xrEndSession;
-    g_clientFunctionMap["xrRequestExitSession"] = (PFN_xrVoidFunction)xrRequestExitSession;
-    g_clientFunctionMap["xrEnumerateReferenceSpaces"] = (PFN_xrVoidFunction)xrEnumerateReferenceSpaces;
-    g_clientFunctionMap["xrCreateReferenceSpace"] = (PFN_xrVoidFunction)xrCreateReferenceSpace;
-    g_clientFunctionMap["xrDestroySpace"] = (PFN_xrVoidFunction)xrDestroySpace;
-    g_clientFunctionMap["xrLocateSpace"] = (PFN_xrVoidFunction)xrLocateSpace;
-    g_clientFunctionMap["xrWaitFrame"] = (PFN_xrVoidFunction)xrWaitFrame;
-    g_clientFunctionMap["xrBeginFrame"] = (PFN_xrVoidFunction)xrBeginFrame;
-    g_clientFunctionMap["xrEndFrame"] = (PFN_xrVoidFunction)xrEndFrame;
-    g_clientFunctionMap["xrLocateViews"] = (PFN_xrVoidFunction)xrLocateViews;
-    g_clientFunctionMap["xrCreateActionSet"] = (PFN_xrVoidFunction)xrCreateActionSet;
-    g_clientFunctionMap["xrDestroyActionSet"] = (PFN_xrVoidFunction)xrDestroyActionSet;
-    g_clientFunctionMap["xrCreateAction"] = (PFN_xrVoidFunction)xrCreateAction;
-    g_clientFunctionMap["xrDestroyAction"] = (PFN_xrVoidFunction)xrDestroyAction;
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateInstanceExtensionProperties);
+    g_clientFunctionMap["xrCreateInstance"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateInstance);
+    g_clientFunctionMap["xrDestroyInstance"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroyInstance);
+    g_clientFunctionMap["xrGetInstanceProperties"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetInstanceProperties);
+    g_clientFunctionMap["xrPollEvent"] = reinterpret_cast<PFN_xrVoidFunction>(xrPollEvent);
+    g_clientFunctionMap["xrResultToString"] = reinterpret_cast<PFN_xrVoidFunction>(xrResultToString);
+    g_clientFunctionMap["xrStructureTypeToString"] = reinterpret_cast<PFN_xrVoidFunction>(xrStructureTypeToString);
+    g_clientFunctionMap["xrGetSystem"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetSystem);
+    g_clientFunctionMap["xrGetSystemProperties"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetSystemProperties);
+    g_clientFunctionMap["xrEnumerateViewConfigurations"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViewConfigurations);
+    g_clientFunctionMap["xrGetViewConfigurationProperties"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetViewConfigurationProperties);
+    g_clientFunctionMap["xrEnumerateViewConfigurationViews"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViewConfigurationViews);
+    g_clientFunctionMap["xrEnumerateEnvironmentBlendModes"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateEnvironmentBlendModes);
+    g_clientFunctionMap["xrCreateSession"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateSession);
+    g_clientFunctionMap["xrDestroySession"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroySession);
+    g_clientFunctionMap["xrBeginSession"] = reinterpret_cast<PFN_xrVoidFunction>(xrBeginSession);
+    g_clientFunctionMap["xrEndSession"] = reinterpret_cast<PFN_xrVoidFunction>(xrEndSession);
+    g_clientFunctionMap["xrRequestExitSession"] = reinterpret_cast<PFN_xrVoidFunction>(xrRequestExitSession);
+    g_clientFunctionMap["xrEnumerateReferenceSpaces"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateReferenceSpaces);
+    g_clientFunctionMap["xrCreateReferenceSpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateReferenceSpace);
+    g_clientFunctionMap["xrDestroySpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroySpace);
+    g_clientFunctionMap["xrLocateSpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrLocateSpace);
+    g_clientFunctionMap["xrWaitFrame"] = reinterpret_cast<PFN_xrVoidFunction>(xrWaitFrame);
+    g_clientFunctionMap["xrBeginFrame"] = reinterpret_cast<PFN_xrVoidFunction>(xrBeginFrame);
+    g_clientFunctionMap["xrEndFrame"] = reinterpret_cast<PFN_xrVoidFunction>(xrEndFrame);
+    g_clientFunctionMap["xrLocateViews"] = reinterpret_cast<PFN_xrVoidFunction>(xrLocateViews);
+    g_clientFunctionMap["xrCreateActionSet"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateActionSet);
+    g_clientFunctionMap["xrDestroyActionSet"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroyActionSet);
+    g_clientFunctionMap["xrCreateAction"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateAction);
+    g_clientFunctionMap["xrDestroyAction"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroyAction);
     g_clientFunctionMap["xrSuggestInteractionProfileBindings"] =
-        (PFN_xrVoidFunction)xrSuggestInteractionProfileBindings;
-    g_clientFunctionMap["xrAttachSessionActionSets"] = (PFN_xrVoidFunction)xrAttachSessionActionSets;
-    g_clientFunctionMap["xrGetCurrentInteractionProfile"] = (PFN_xrVoidFunction)xrGetCurrentInteractionProfile;
-    g_clientFunctionMap["xrSyncActions"] = (PFN_xrVoidFunction)xrSyncActions;
-    g_clientFunctionMap["xrGetActionStateBoolean"] = (PFN_xrVoidFunction)xrGetActionStateBoolean;
-    g_clientFunctionMap["xrGetActionStateFloat"] = (PFN_xrVoidFunction)xrGetActionStateFloat;
-    g_clientFunctionMap["xrGetActionStateVector2f"] = (PFN_xrVoidFunction)xrGetActionStateVector2f;
-    g_clientFunctionMap["xrGetActionStatePose"] = (PFN_xrVoidFunction)xrGetActionStatePose;
-    g_clientFunctionMap["xrCreateActionSpace"] = (PFN_xrVoidFunction)xrCreateActionSpace;
-    g_clientFunctionMap["xrGetReferenceSpaceBoundsRect"] = (PFN_xrVoidFunction)xrGetReferenceSpaceBoundsRect;
-    g_clientFunctionMap["xrEnumerateBoundSourcesForAction"] = (PFN_xrVoidFunction)xrEnumerateBoundSourcesForAction;
-    g_clientFunctionMap["xrGetInputSourceLocalizedName"] = (PFN_xrVoidFunction)xrGetInputSourceLocalizedName;
-    g_clientFunctionMap["xrApplyHapticFeedback"] = (PFN_xrVoidFunction)xrApplyHapticFeedback;
-    g_clientFunctionMap["xrStopHapticFeedback"] = (PFN_xrVoidFunction)xrStopHapticFeedback;
-    g_clientFunctionMap["xrEnumerateSwapchainFormats"] = (PFN_xrVoidFunction)xrEnumerateSwapchainFormats;
-    g_clientFunctionMap["xrCreateSwapchain"] = (PFN_xrVoidFunction)xrCreateSwapchain;
-    g_clientFunctionMap["xrDestroySwapchain"] = (PFN_xrVoidFunction)xrDestroySwapchain;
-    g_clientFunctionMap["xrEnumerateSwapchainImages"] = (PFN_xrVoidFunction)xrEnumerateSwapchainImages;
-    g_clientFunctionMap["xrAcquireSwapchainImage"] = (PFN_xrVoidFunction)xrAcquireSwapchainImage;
-    g_clientFunctionMap["xrWaitSwapchainImage"] = (PFN_xrVoidFunction)xrWaitSwapchainImage;
-    g_clientFunctionMap["xrReleaseSwapchainImage"] = (PFN_xrVoidFunction)xrReleaseSwapchainImage;
-    g_clientFunctionMap["xrStringToPath"] = (PFN_xrVoidFunction)xrStringToPath;
-    g_clientFunctionMap["xrPathToString"] = (PFN_xrVoidFunction)xrPathToString;
-    g_clientFunctionMap["xrGetOpenGLGraphicsRequirementsKHR"] = (PFN_xrVoidFunction)xrGetOpenGLGraphicsRequirementsKHR;
-    g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] = (PFN_xrVoidFunction)xrEnumerateViveTrackerPathsHTCX;
+        reinterpret_cast<PFN_xrVoidFunction>(xrSuggestInteractionProfileBindings);
+    g_clientFunctionMap["xrAttachSessionActionSets"] = reinterpret_cast<PFN_xrVoidFunction>(xrAttachSessionActionSets);
+    g_clientFunctionMap["xrGetCurrentInteractionProfile"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetCurrentInteractionProfile);
+    g_clientFunctionMap["xrSyncActions"] = reinterpret_cast<PFN_xrVoidFunction>(xrSyncActions);
+    g_clientFunctionMap["xrGetActionStateBoolean"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetActionStateBoolean);
+    g_clientFunctionMap["xrGetActionStateFloat"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetActionStateFloat);
+    g_clientFunctionMap["xrGetActionStateVector2f"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetActionStateVector2f);
+    g_clientFunctionMap["xrGetActionStatePose"] = reinterpret_cast<PFN_xrVoidFunction>(xrGetActionStatePose);
+    g_clientFunctionMap["xrCreateActionSpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateActionSpace);
+    g_clientFunctionMap["xrGetReferenceSpaceBoundsRect"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetReferenceSpaceBoundsRect);
+    g_clientFunctionMap["xrEnumerateBoundSourcesForAction"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateBoundSourcesForAction);
+    g_clientFunctionMap["xrGetInputSourceLocalizedName"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetInputSourceLocalizedName);
+    g_clientFunctionMap["xrApplyHapticFeedback"] = reinterpret_cast<PFN_xrVoidFunction>(xrApplyHapticFeedback);
+    g_clientFunctionMap["xrStopHapticFeedback"] = reinterpret_cast<PFN_xrVoidFunction>(xrStopHapticFeedback);
+    g_clientFunctionMap["xrEnumerateSwapchainFormats"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateSwapchainFormats);
+    g_clientFunctionMap["xrCreateSwapchain"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateSwapchain);
+    g_clientFunctionMap["xrDestroySwapchain"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroySwapchain);
+    g_clientFunctionMap["xrEnumerateSwapchainImages"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateSwapchainImages);
+    g_clientFunctionMap["xrAcquireSwapchainImage"] = reinterpret_cast<PFN_xrVoidFunction>(xrAcquireSwapchainImage);
+    g_clientFunctionMap["xrWaitSwapchainImage"] = reinterpret_cast<PFN_xrVoidFunction>(xrWaitSwapchainImage);
+    g_clientFunctionMap["xrReleaseSwapchainImage"] = reinterpret_cast<PFN_xrVoidFunction>(xrReleaseSwapchainImage);
+    g_clientFunctionMap["xrStringToPath"] = reinterpret_cast<PFN_xrVoidFunction>(xrStringToPath);
+    g_clientFunctionMap["xrPathToString"] = reinterpret_cast<PFN_xrVoidFunction>(xrPathToString);
+    g_clientFunctionMap["xrGetOpenGLGraphicsRequirementsKHR"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetOpenGLGraphicsRequirementsKHR);
+    g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViveTrackerPathsHTCX);
 }
 
 // xrGetInstanceProcAddr
