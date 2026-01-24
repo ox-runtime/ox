@@ -24,6 +24,7 @@ cmake_install.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
+Testing/
 
 # Compiled binaries
 *.dll
