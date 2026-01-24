@@ -900,6 +900,42 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
     return XR_SUCCESS;
 }
 
+XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpaces(XrSession session, const XrSpacesLocateInfo* locateInfo,
+                                              XrSpaceLocations* spaceLocations) {
+    LOG_DEBUG("xrLocateSpaces called");
+    if (!locateInfo || !spaceLocations) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    if (locateInfo->spaceCount == 0 || !locateInfo->spaces) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+
+    // Time validation: must be a positive non-zero XrTime
+    if (locateInfo->time <= 0) {
+        return XR_ERROR_TIME_INVALID;
+    }
+
+    if (!spaceLocations->locations || spaceLocations->locationCount < locateInfo->spaceCount) {
+        return XR_ERROR_SIZE_INSUFFICIENT;
+    }
+
+    spaceLocations->type = XR_TYPE_SPACE_LOCATIONS;
+    spaceLocations->locationCount = locateInfo->spaceCount;
+
+    // Reuse xrLocateSpace for each space; xrLocateSpace does its own locking/validation
+    for (uint32_t i = 0; i < locateInfo->spaceCount; ++i) {
+        XrSpaceLocation spaceLoc;
+        XrResult res = xrLocateSpace(locateInfo->spaces[i], locateInfo->baseSpace, locateInfo->time, &spaceLoc);
+        if (XR_FAILED(res)) {
+            return res;
+        }
+        spaceLocations->locations[i].pose = spaceLoc.pose;
+    }
+
+    return XR_SUCCESS;
+}
+
 XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitInfo* frameWaitInfo,
                                            XrFrameState* frameState) {
     LOG_DEBUG("xrWaitFrame called");
@@ -1591,6 +1627,7 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrCreateReferenceSpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateReferenceSpace);
     g_clientFunctionMap["xrDestroySpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrDestroySpace);
     g_clientFunctionMap["xrLocateSpace"] = reinterpret_cast<PFN_xrVoidFunction>(xrLocateSpace);
+    g_clientFunctionMap["xrLocateSpaces"] = reinterpret_cast<PFN_xrVoidFunction>(xrLocateSpaces);
     g_clientFunctionMap["xrWaitFrame"] = reinterpret_cast<PFN_xrVoidFunction>(xrWaitFrame);
     g_clientFunctionMap["xrBeginFrame"] = reinterpret_cast<PFN_xrVoidFunction>(xrBeginFrame);
     g_clientFunctionMap["xrEndFrame"] = reinterpret_cast<PFN_xrVoidFunction>(xrEndFrame);
