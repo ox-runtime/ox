@@ -33,6 +33,7 @@
 #include <unordered_map>
 
 #include "../logging.h"
+#include "iservice_connection.h"
 #include "service_connection.h"
 
 using namespace ox::client;
@@ -44,6 +45,15 @@ using namespace ox::protocol;
 #else
 #define RUNTIME_EXPORT __attribute__((visibility("default")))
 #endif
+
+// Global service connection - can be overridden by tests
+static IServiceConnection* g_service_connection = &ServiceConnection::Instance();
+
+// For testing: Allow injection of a mock service connection
+// Note: This must be called before creating any OpenXR instances
+extern "C" {
+RUNTIME_EXPORT void oxSetServiceConnection(IServiceConnection* service) { g_service_connection = service; }
+}
 
 // Instance handle management
 static std::unordered_map<XrInstance, bool> g_instances;
@@ -112,7 +122,7 @@ inline void BuildDeviceMap() {
         return;
     }
 
-    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    auto* shared_data = g_service_connection->GetSharedData();
     if (!shared_data) {
         return;
     }
@@ -240,14 +250,11 @@ inline XrResult GetActionState(XrSession session, const XrActionStateGetInfo* ge
         auto value = state->currentState;
         auto result = XR_FALSE;
         if constexpr (std::is_same_v<StateType, XrActionStateBoolean>) {
-            result =
-                ServiceConnection::Instance().GetInputStateBoolean(user_path.c_str(), component_path.c_str(), 0, value);
+            result = g_service_connection->GetInputStateBoolean(user_path.c_str(), component_path.c_str(), 0, value);
         } else if constexpr (std::is_same_v<StateType, XrActionStateFloat>) {
-            result =
-                ServiceConnection::Instance().GetInputStateFloat(user_path.c_str(), component_path.c_str(), 0, value);
+            result = g_service_connection->GetInputStateFloat(user_path.c_str(), component_path.c_str(), 0, value);
         } else if constexpr (std::is_same_v<StateType, XrActionStateVector2f>) {
-            result = ServiceConnection::Instance().GetInputStateVector2f(user_path.c_str(), component_path.c_str(), 0,
-                                                                         value);
+            result = g_service_connection->GetInputStateVector2f(user_path.c_str(), component_path.c_str(), 0, value);
         } else {
             return XR_ERROR_VALIDATION_FAILURE;
         }
@@ -329,14 +336,14 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateInstance(const XrInstanceCreateInfo* crea
     }
 
     // Connect to service
-    if (!ServiceConnection::Instance().Connect()) {
+    if (!g_service_connection->Connect()) {
         LOG_ERROR("Failed to connect to service");
         return XR_ERROR_RUNTIME_FAILURE;
     }
 
     // Create instance handle
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::INSTANCE);
+    uint64_t handle = g_service_connection->AllocateHandle(HandleType::INSTANCE);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate instance handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
@@ -364,7 +371,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroyInstance(XrInstance instance) {
 
     // Disconnect from service if no more instances
     if (g_instances.empty()) {
-        ServiceConnection::Instance().Disconnect();
+        g_service_connection->Disconnect();
     }
 
     LOG_INFO("OpenXR instance destroyed");
@@ -386,7 +393,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProperties(XrInstance instance, XrIn
     }
 
     // Get runtime properties from cached metadata
-    auto& props = ServiceConnection::Instance().GetRuntimeProperties();
+    auto& props = g_service_connection->GetRuntimeProperties();
     uint32_t version =
         XR_MAKE_VERSION(props.runtime_version_major, props.runtime_version_minor, props.runtime_version_patch);
     instanceProperties->runtimeVersion = version;
@@ -404,7 +411,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffe
 
     // Get next event from service
     SessionStateEvent service_event;
-    if (ServiceConnection::Instance().GetNextEvent(service_event)) {
+    if (g_service_connection->GetNextEvent(service_event)) {
         XrEventDataSessionStateChanged* stateEvent = reinterpret_cast<XrEventDataSessionStateChanged*>(eventData);
         stateEvent->type = XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED;
         stateEvent->next = nullptr;
@@ -607,7 +614,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetSystemProperties(XrInstance instance, XrSyst
     }
 
     // Get system properties from cached metadata
-    auto& sys_props = ServiceConnection::Instance().GetSystemProperties();
+    auto& sys_props = g_service_connection->GetSystemProperties();
     properties->systemId = systemId;
     safe_copy_string(properties->systemName, XR_MAX_SYSTEM_NAME_SIZE, sys_props.system_name);
     properties->graphicsProperties.maxSwapchainImageWidth = sys_props.max_swapchain_width;
@@ -663,7 +670,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViewConfigurationViews(XrInstance inst
 
     if (viewCapacityInput > 0 && views) {
         // Get view configurations from cached metadata
-        auto& view_configs = ServiceConnection::Instance().GetViewConfigurations();
+        auto& view_configs = g_service_connection->GetViewConfigurations();
 
         for (uint32_t i = 0; i < 2 && i < viewCapacityInput; i++) {
             views[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
@@ -727,11 +734,11 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
     }
 
     // Service will create session and return handle via CREATE_SESSION message
-    ServiceConnection::Instance().SendRequest(MessageType::CREATE_SESSION);
+    g_service_connection->SendRequest(MessageType::CREATE_SESSION);
 
     // The service returns the session handle in the response, but for now
     // we'll get it from shared memory after the state transitions
-    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    auto* shared_data = g_service_connection->GetSharedData();
     if (!shared_data) {
         LOG_ERROR("xrCreateSession: No service connection");
         return XR_ERROR_RUNTIME_FAILURE;
@@ -758,7 +765,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
 XRAPI_ATTR XrResult XRAPI_CALL xrDestroySession(XrSession session) {
     LOG_DEBUG("xrDestroySession called");
 
-    ServiceConnection::Instance().SendRequest(MessageType::DESTROY_SESSION);
+    g_service_connection->SendRequest(MessageType::DESTROY_SESSION);
 
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     g_sessions.erase(session);
@@ -810,7 +817,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session, const X
     }
 
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SPACE);
+    uint64_t handle = g_service_connection->AllocateHandle(HandleType::SPACE);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate space handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
@@ -841,7 +848,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
     auto it = g_action_spaces.find(space);
     if (it != g_action_spaces.end()) {
         // This is an action space - get controller pose from shared memory
-        auto* shared_data = ServiceConnection::Instance().GetSharedData();
+        auto* shared_data = g_service_connection->GetSharedData();
         if (!shared_data) {
             location->locationFlags = 0;
             return XR_SUCCESS;
@@ -944,7 +951,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitI
     }
 
     // Read frame data from shared memory
-    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    auto* shared_data = g_service_connection->GetSharedData();
     if (shared_data) {
         frameState->predictedDisplayTime =
             shared_data->fields.frame_state.predicted_display_time.load(std::memory_order_acquire);
@@ -995,7 +1002,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLoca
     viewState->viewStateFlags = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
 
     // Read pose data from shared memory
-    auto* shared_data = ServiceConnection::Instance().GetSharedData();
+    auto* shared_data = g_service_connection->GetSharedData();
     if (views && viewCapacityInput >= 2 && shared_data) {
         uint32_t view_count = shared_data->fields.frame_state.view_count.load(std::memory_order_acquire);
 
@@ -1024,7 +1031,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSet(XrInstance instance, const XrAc
     if (!createInfo || !actionSet) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::ACTION_SET);
+    uint64_t handle = g_service_connection->AllocateHandle(HandleType::ACTION_SET);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate action set handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
@@ -1044,7 +1051,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateAction(XrActionSet actionSet, const XrAct
     if (!createInfo || !action) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::ACTION);
+    uint64_t handle = g_service_connection->AllocateHandle(HandleType::ACTION);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate action handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
@@ -1154,7 +1161,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrAttachSessionActionSets(XrSession session,
     std::lock_guard<std::mutex> lock(g_instance_mutex);
 
     // Get driver-supported profiles from service
-    const auto& driver_profiles = ServiceConnection::Instance().GetInteractionProfiles();
+    const auto& driver_profiles = g_service_connection->GetInteractionProfiles();
 
     // Try to find a match between suggested profiles and driver-supported profiles
     for (const auto& suggested : g_suggested_profiles) {
@@ -1266,7 +1273,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateActionSpace(XrSession session, const XrAc
     }
 
     std::lock_guard<std::mutex> lock(g_instance_mutex);
-    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SPACE);
+    uint64_t handle = g_service_connection->AllocateHandle(HandleType::SPACE);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate action space handle from service");
         return XR_ERROR_RUNTIME_FAILURE;
@@ -1372,7 +1379,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    uint64_t handle = ServiceConnection::Instance().AllocateHandle(HandleType::SWAPCHAIN);
+    uint64_t handle = g_service_connection->AllocateHandle(HandleType::SWAPCHAIN);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate swapchain handle from service");
         return XR_ERROR_RUNTIME_FAILURE;

@@ -6,47 +6,51 @@
 #include "../protocol/control_channel.h"
 #include "../protocol/messages.h"
 #include "../protocol/shared_memory.h"
+#include "iservice_connection.h"
 
 namespace ox {
 namespace client {
 
 // Client connection to service
-class ServiceConnection {
+class ServiceConnection : public IServiceConnection {
    public:
     static ServiceConnection& Instance() {
         static ServiceConnection instance;
         return instance;
     }
 
-    bool Connect();
-    void Disconnect();
-    bool IsConnected() const { return connected_; }
+    // IServiceConnection interface implementation
+    bool Connect() override;
+    void Disconnect() override;
+    bool IsConnected() const override { return connected_; }
 
-    protocol::SharedData* GetSharedData() { return shared_data_; }
-    protocol::ControlChannel& GetControlChannel() { return control_; }
+    protocol::SharedData* GetSharedData() override { return shared_data_; }
+    protocol::ControlChannel& GetControlChannel() override { return control_; }
 
     // Send control message and wait for response
-    bool SendRequest(protocol::MessageType type, const void* payload = nullptr, uint32_t payload_size = 0);
+    bool SendRequest(protocol::MessageType type, const void* payload = nullptr, uint32_t payload_size = 0) override;
 
     // Allocate a handle from the service
-    uint64_t AllocateHandle(protocol::HandleType type);
+    uint64_t AllocateHandle(protocol::HandleType type) override;
 
     // Get next event from service (returns true if event available)
-    bool GetNextEvent(protocol::SessionStateEvent& event);
+    bool GetNextEvent(protocol::SessionStateEvent& event) override;
 
     // Get cached static metadata (queried once on connect)
-    const protocol::RuntimePropertiesResponse& GetRuntimeProperties() const { return runtime_props_; }
-    const protocol::SystemPropertiesResponse& GetSystemProperties() const { return system_props_; }
-    const protocol::ViewConfigurationsResponse& GetViewConfigurations() const { return view_configs_; }
-    const protocol::InteractionProfilesResponse& GetInteractionProfiles() const { return interaction_profiles_; }
+    const protocol::RuntimePropertiesResponse& GetRuntimeProperties() const override { return runtime_props_; }
+    const protocol::SystemPropertiesResponse& GetSystemProperties() const override { return system_props_; }
+    const protocol::ViewConfigurationsResponse& GetViewConfigurations() const override { return view_configs_; }
+    const protocol::InteractionProfilesResponse& GetInteractionProfiles() const override {
+        return interaction_profiles_;
+    }
 
     // Query input state from driver - type-specific calls
     bool GetInputStateBoolean(const char* user_path, const char* component_path, int64_t predicted_time,
-                              XrBool32& out_value);
+                              XrBool32& out_value) override;
     bool GetInputStateFloat(const char* user_path, const char* component_path, int64_t predicted_time,
-                            float& out_value);
+                            float& out_value) override;
     bool GetInputStateVector2f(const char* user_path, const char* component_path, int64_t predicted_time,
-                               XrVector2f& out_value);
+                               XrVector2f& out_value) override;
 
    private:
     ServiceConnection() : shared_data_(nullptr), connected_(false), sequence_(0) {}
