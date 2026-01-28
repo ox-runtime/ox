@@ -303,6 +303,9 @@ class OxService {
                 case MessageType::GET_INPUT_STATE_VECTOR2F:
                     HandleGetInputStateVector2f(header, payload);
                     break;
+                case MessageType::REQUEST_EXIT_SESSION:
+                    HandleRequestExitSession(header, payload);
+                    break;
                 default:
                     LOG_ERROR("Unknown message type");
                     break;
@@ -364,6 +367,38 @@ class OxService {
         response.payload_size = 0;
         control_.Send(response);
         LOG_INFO("Session destroyed");
+    }
+
+    void HandleRequestExitSession(const MessageHeader& request, const std::vector<uint8_t>& payload) {
+        if (payload.size() < sizeof(RequestExitSessionRequest)) {
+            LOG_ERROR("Invalid request exit session request");
+            return;
+        }
+
+        const RequestExitSessionRequest* req = reinterpret_cast<const RequestExitSessionRequest*>(payload.data());
+        uint64_t session_handle = shared_data_->fields.active_session_handle.load(std::memory_order_acquire);
+
+        if (req->session_handle != session_handle) {
+            LOG_ERROR("RequestExitSession for invalid session handle");
+            return;
+        }
+
+        // Transition to STOPPING state
+        TransitionSessionState(SessionState::STOPPING);
+
+        // After a brief moment, transition to EXITING
+        std::thread([this]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            TransitionSessionState(SessionState::EXITING);
+        }).detach();
+
+        MessageHeader response;
+        response.type = MessageType::RESPONSE;
+        response.sequence = request.sequence;
+        response.payload_size = 0;
+        control_.Send(response);
+
+        LOG_INFO("Session exit requested");
     }
 
     void HandleAllocateHandle(const MessageHeader& request, const std::vector<uint8_t>& payload) {

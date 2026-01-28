@@ -786,6 +786,15 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEndSession(XrSession session) {
 
 XRAPI_ATTR XrResult XRAPI_CALL xrRequestExitSession(XrSession session) {
     LOG_DEBUG("xrRequestExitSession called");
+
+    RequestExitSessionRequest request;
+    request.session_handle = reinterpret_cast<uint64_t>(session);
+
+    if (!g_service_connection->SendRequest(MessageType::REQUEST_EXIT_SESSION, &request, sizeof(request))) {
+        LOG_ERROR("Failed to send REQUEST_EXIT_SESSION message");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+
     return XR_SUCCESS;
 }
 
@@ -1504,7 +1513,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrReleaseSwapchainImage(XrSwapchain swapchain,
 
 // Path/string functions
 XRAPI_ATTR XrResult XRAPI_CALL xrStringToPath(XrInstance instance, const char* pathString, XrPath* path) {
-    LOG_DEBUG("xrStringToPath called");
+    // LOG_DEBUG("xrStringToPath called");
     if (!pathString || !path) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
@@ -1527,7 +1536,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrStringToPath(XrInstance instance, const char* p
 
 XRAPI_ATTR XrResult XRAPI_CALL xrPathToString(XrInstance instance, XrPath path, uint32_t bufferCapacityInput,
                                               uint32_t* bufferCountOutput, char* buffer) {
-    LOG_DEBUG("xrPathToString called");
+    // LOG_DEBUG("xrPathToString called");
 
     // Note: Caller must hold g_instance_mutex
     // Look up the path string

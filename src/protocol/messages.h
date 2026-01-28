@@ -35,6 +35,7 @@ enum class MessageType : uint32_t {
     GET_INPUT_STATE_BOOLEAN = 14,
     GET_INPUT_STATE_FLOAT = 15,
     GET_INPUT_STATE_VECTOR2F = 16,
+    REQUEST_EXIT_SESSION = 17,
     RESPONSE = 100,
 };
 
@@ -82,6 +83,10 @@ struct AllocateHandleRequest {
 
 struct AllocateHandleResponse {
     uint64_t handle;
+};
+
+struct RequestExitSessionRequest {
+    uint64_t session_handle;
 };
 
 struct SessionStateEvent {
