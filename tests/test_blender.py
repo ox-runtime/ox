@@ -1,4 +1,5 @@
 # Run using `blender --python test_blender.py`
+# Remember to set XR_RUNTIME_JSON="/path/to/ox_openxr.json" before running blender
 
 import bpy
 
