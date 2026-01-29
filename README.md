@@ -45,9 +45,6 @@ Then run any OpenXR application.
 
 ## Troubleshooting
 
-**"OpenXR SDK not found"**
-- Initialize the submodule: `git submodule update --init`
-
 **"XR_ERROR_RUNTIME_UNAVAILABLE"**
 - Check that `XR_RUNTIME_JSON` environment variable is set correctly
 - Verify the manifest file exists at `build/bin/ox_openxr.json`
