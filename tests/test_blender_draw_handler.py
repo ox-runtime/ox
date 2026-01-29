@@ -5,12 +5,9 @@ import bpy
 
 
 def test_xr_with_draw_handler():
-    # Define a simple draw handler
     def draw_callback():
-        # This handler runs during VR rendering
         print("Draw handler executed in XR session")
 
-    # Add the draw handler to the 3D View
     handler = bpy.types.SpaceView3D.draw_handler_add(draw_callback, (), "XR", "POST_VIEW")
 
     # Get the 3D View from the default screen
