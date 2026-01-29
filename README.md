@@ -45,10 +45,6 @@ export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json
 
 Then run any OpenXR application.
 
-## Contributing
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ## Troubleshooting
 
 **"OpenXR SDK not found"**
