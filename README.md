@@ -9,9 +9,6 @@ The primary purpose of **ox** is automated testing of OpenXR applications. It co
 ## Building
 
 ```bash
-# Initialize submodules
-git submodule update --init
-
 # Build the runtime
 cmake -B build
 cmake --build build --config Release
