@@ -17,7 +17,8 @@ cmake -B build
 cmake --build build --config Release
 
 # Quick test (requires https://github.com/cmbruns/pyopenxr_examples)
-python tests/test.py
+export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json
+python pyopenxr_examples/xr_examples/runtime_name.py
 ```
 
 Expected output:
