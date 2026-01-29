@@ -53,17 +53,8 @@ def wait_for_restart(area):
 
 # Get the 3D View from the default screen
 screen = bpy.context.screen
-area = None
-for a in screen.areas:
-    if a.type == "VIEW_3D":
-        area = a
-        break
+area = next((a for a in screen.areas if a.type == "VIEW_3D"), None)
 
-if not area:
-    print("No 3D View found")
-    exit(1)
-
-print("Starting VR session...")
 with bpy.context.temp_override(area=area):
     bpy.ops.wm.xr_session_toggle()
 
