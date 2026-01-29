@@ -3,10 +3,11 @@
 
 import bpy
 
-MODE_CHECK_INTERVAL = 0.5  # seconds
+TIMER_INTERVAL = 0.5  # seconds
 
 
 def test_timers_in_xr():
+    # Define a timer
     def _test_timer():
         print("Timer check in XR session")
 
@@ -14,32 +15,22 @@ def test_timers_in_xr():
         view_layer = bpy.context.view_layer
         print(f"View layer accessed successfully: {view_layer}")
 
-        return MODE_CHECK_INTERVAL
+        return TIMER_INTERVAL
+
+    bpy.app.timers.register(_test_timer, persistent=True)
 
     # Define a simple draw handler
     def draw_callback():
-        # This handler runs during VR rendering
         print("Draw handler executed in XR session")
 
-    if not bpy.app.background:
-        bpy.app.timers.register(_test_timer, persistent=True)
-
-    # Add the draw handler to the 3D View
     handler = bpy.types.SpaceView3D.draw_handler_add(draw_callback, (), "XR", "POST_VIEW")
 
     # Get the 3D View from the default screen and start XR session
     screen = bpy.context.screen
-    area = None
-    for a in screen.areas:
-        if a.type == "VIEW_3D":
-            area = a
-            break
+    area = next((a for a in screen.areas if a.type == "VIEW_3D"), None)
 
-    if area:
-        with bpy.context.temp_override(area=area):
-            bpy.ops.wm.xr_session_toggle()
-    else:
-        print("No 3D View found")
+    with bpy.context.temp_override(area=area):
+        bpy.ops.wm.xr_session_toggle()
 
 
 # Run the test
