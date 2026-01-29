@@ -1,0 +1,31 @@
+# Run using `blender --python test_blender_draw_handler.py`
+
+import bpy
+
+
+def test_xr_with_draw_handler():
+    # Define a simple draw handler
+    def draw_callback():
+        # This handler runs during VR rendering
+        print("Draw handler executed in XR session")
+
+    # Add the draw handler to the 3D View
+    handler = bpy.types.SpaceView3D.draw_handler_add(draw_callback, (), "XR", "POST_VIEW")
+
+    # Get the 3D View from the default screen
+    screen = bpy.context.screen
+    area = None
+    for a in screen.areas:
+        if a.type == "VIEW_3D":
+            area = a
+            break
+
+    if area:
+        with bpy.context.temp_override(area=area):
+            bpy.ops.wm.xr_session_toggle()
+    else:
+        print("No 3D View found")
+
+
+# Run the test
+test_xr_with_draw_handler()
