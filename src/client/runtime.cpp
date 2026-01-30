@@ -7,29 +7,41 @@
 #elif defined(__APPLE__)
 #include <TargetConditionals.h>
 #else
+#ifdef OX_OPENGL
 #include <GL/glx.h>
 #include <X11/Xlib.h>
 #endif
+#endif
 
 // Include Vulkan headers before OpenXR
+#ifdef OX_VULKAN
 #include <vulkan/vulkan.h>
+#endif
 
+// Define graphics API usage macros based on enabled APIs
+#ifdef OX_OPENGL
 #define XR_USE_GRAPHICS_API_OPENGL
+#endif
+#ifdef OX_VULKAN
 #define XR_USE_GRAPHICS_API_VULKAN
-#ifdef __APPLE__
+#endif
+#ifdef OX_METAL
 #define XR_USE_GRAPHICS_API_METAL
 #endif
+
 #include <openxr/openxr.h>
 #include <openxr/openxr_loader_negotiation.h>
 #include <openxr/openxr_platform.h>
 
 // Include OpenGL for texture creation
+#ifdef OX_OPENGL
 #ifdef _WIN32
 #include <GL/gl.h>
 #elif defined(__APPLE__)
 #include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
+#endif
 #endif
 
 #include <algorithm>
@@ -44,7 +56,7 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef __APPLE__
+#ifdef OX_METAL
 #include "metal_swapchain.h"
 #endif
 
@@ -81,10 +93,12 @@ static std::unordered_map<XrSpace, XrSession> g_spaces;
 
 // Session graphics binding data
 struct SessionGraphicsBinding {
+#ifdef OX_VULKAN
     VkDevice vkDevice = VK_NULL_HANDLE;
     VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
     VkInstance vkInstance = VK_NULL_HANDLE;
-#ifdef __APPLE__
+#endif
+#ifdef OX_METAL
     void* metalDevice = nullptr;  // id<MTLDevice> (opaque pointer to avoid Objective-C in C++)
 #endif
     GraphicsAPI graphicsAPI = GraphicsAPI::OpenGL;
@@ -93,15 +107,17 @@ static std::unordered_map<XrSession, SessionGraphicsBinding> g_session_graphics;
 
 // Swapchain image data
 struct SwapchainData {
-    std::vector<uint32_t> glTextureIds;         // OpenGL texture IDs
+    std::vector<uint32_t> glTextureIds;  // OpenGL texture IDs
+#ifdef OX_VULKAN
     std::vector<VkImage> vkImages;              // Vulkan images
     std::vector<VkDeviceMemory> vkImageMemory;  // Vulkan image memory
-#ifdef __APPLE__
+    VkDevice vkDevice;                          // Vulkan device
+    VkPhysicalDevice vkPhysicalDevice;          // Vulkan physical device
+#endif
+#ifdef OX_METAL
     std::vector<void*> metalTextures;  // Metal textures (id<MTLTexture> as opaque pointers)
     void* metalDevice = nullptr;       // Metal device (id<MTLDevice> as opaque pointer)
 #endif
-    VkDevice vkDevice;                  // Vulkan device
-    VkPhysicalDevice vkPhysicalDevice;  // Vulkan physical device
     uint32_t width;
     uint32_t height;
     int64_t format;
@@ -334,14 +350,23 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties(const char
                                                                       uint32_t* propertyCountOutput,
                                                                       XrExtensionProperties* properties) {
     LOG_DEBUG("xrEnumerateInstanceExtensionProperties called");
-#ifdef __APPLE__
-    const char* extensions[] = {"XR_KHR_opengl_enable", "XR_KHR_vulkan_enable", "XR_KHR_vulkan_enable2",
-                                "XR_KHR_metal_enable", "XR_HTCX_vive_tracker_interaction"};
-#else
-    const char* extensions[] = {"XR_KHR_opengl_enable", "XR_KHR_vulkan_enable", "XR_KHR_vulkan_enable2",
-                                "XR_HTCX_vive_tracker_interaction"};
+
+    std::vector<const char*> extensions;
+
+#ifdef OX_OPENGL
+    extensions.push_back("XR_KHR_opengl_enable");
 #endif
-    const uint32_t extensionCount = sizeof(extensions) / sizeof(extensions[0]);
+#ifdef OX_VULKAN
+    extensions.push_back("XR_KHR_vulkan_enable");
+    extensions.push_back("XR_KHR_vulkan_enable2");
+#endif
+#ifdef OX_METAL
+    extensions.push_back("XR_KHR_metal_enable");
+#endif
+
+    extensions.push_back("XR_HTCX_vive_tracker_interaction");
+
+    const uint32_t extensionCount = static_cast<uint32_t>(extensions.size());
 
     if (propertyCountOutput) {
         *propertyCountOutput = extensionCount;
@@ -768,6 +793,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
 
     while (next) {
         const XrBaseInStructure* header = reinterpret_cast<const XrBaseInStructure*>(next);
+#ifdef OX_OPENGL
         if (header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR ||
             header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR ||
             header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_XCB_KHR ||
@@ -777,6 +803,8 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
             LOG_DEBUG("xrCreateSession: OpenGL graphics binding detected");
             break;
         }
+#endif
+#ifdef OX_VULKAN
         if (header->type == XR_TYPE_GRAPHICS_BINDING_VULKAN_KHR) {
             hasGraphicsBinding = true;
             const XrGraphicsBindingVulkanKHR* vkBinding = reinterpret_cast<const XrGraphicsBindingVulkanKHR*>(header);
@@ -790,7 +818,8 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
                           .c_str());
             break;
         }
-#ifdef __APPLE__
+#endif
+#ifdef OX_METAL
         if (header->type == XR_TYPE_GRAPHICS_BINDING_METAL_KHR) {
             hasGraphicsBinding = true;
             const XrGraphicsBindingMetalKHR* metalBinding = reinterpret_cast<const XrGraphicsBindingMetalKHR*>(header);
@@ -1447,18 +1476,20 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, ui
     LOG_DEBUG("xrEnumerateSwapchainFormats called");
 
     // Common formats supported on all platforms
-    std::vector<int64_t> supportedFormats = {
-        // OpenGL formats
-        GL_RGBA,
-        GL_RGBA8,
-        // Vulkan formats (VkFormat enum values)
-        VK_FORMAT_R8G8B8A8_SRGB,
-        VK_FORMAT_B8G8R8A8_SRGB,
-        VK_FORMAT_R8G8B8A8_UNORM,
-    };
+    std::vector<int64_t> supportedFormats;
 
-#ifdef __APPLE__
-    // Add Metal formats on macOS
+#ifdef OX_OPENGL
+    supportedFormats.push_back(GL_RGBA);
+    supportedFormats.push_back(GL_RGBA8);
+#endif
+
+#ifdef OX_VULKAN
+    supportedFormats.push_back(VK_FORMAT_R8G8B8A8_SRGB);
+    supportedFormats.push_back(VK_FORMAT_B8G8R8A8_SRGB);
+    supportedFormats.push_back(VK_FORMAT_R8G8B8A8_UNORM);
+#endif
+
+#ifdef OX_METAL
     auto metalFormats = GetSupportedMetalFormats();
     supportedFormats.insert(supportedFormats.end(), metalFormats.begin(), metalFormats.end());
 #endif
@@ -1510,24 +1541,30 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
     data.width = createInfo->width;
     data.height = createInfo->height;
     data.format = createInfo->format;
+#ifdef OX_VULKAN
     data.vkDevice = VK_NULL_HANDLE;          // Initialize Vulkan device
     data.vkPhysicalDevice = VK_NULL_HANDLE;  // Initialize Vulkan physical device
+#endif
 
     // Determine graphics API from session and store relevant device handles
     auto graphicsIt = g_session_graphics.find(session);
     if (graphicsIt != g_session_graphics.end()) {
         data.graphicsAPI = graphicsIt->second.graphicsAPI;
 
-        if (data.graphicsAPI == GraphicsAPI::Vulkan) {
-            data.vkDevice = graphicsIt->second.vkDevice;
-            data.vkPhysicalDevice = graphicsIt->second.vkPhysicalDevice;
-        }
-#ifdef __APPLE__
-        else if (data.graphicsAPI == GraphicsAPI::Metal) {
-            data.metalDevice = graphicsIt->second.metalDevice;
-            LOG_DEBUG("Stored Metal device for swapchain");
-        }
+        switch (data.graphicsAPI) {
+#ifdef OX_VULKAN
+            case GraphicsAPI::Vulkan:
+                data.vkDevice = graphicsIt->second.vkDevice;
+                data.vkPhysicalDevice = graphicsIt->second.vkPhysicalDevice;
+                break;
 #endif
+#ifdef OX_METAL
+            case GraphicsAPI::Metal:
+                data.metalDevice = graphicsIt->second.metalDevice;
+                LOG_DEBUG("Stored Metal device for swapchain");
+                break;
+#endif
+        }
     }
 
     g_swapchains[*swapchain] = data;
@@ -1543,11 +1580,14 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
     auto it = g_swapchains.find(swapchain);
     if (it != g_swapchains.end()) {
         // Delete OpenGL textures if they were created
+#ifdef OX_OPENGL
         if (!it->second.glTextureIds.empty()) {
             glDeleteTextures(static_cast<GLsizei>(it->second.glTextureIds.size()), it->second.glTextureIds.data());
         }
+#endif
 
         // Destroy Vulkan images if they were created
+#ifdef OX_VULKAN
         if (it->second.graphicsAPI == GraphicsAPI::Vulkan && !it->second.vkImages.empty()) {
             VkDevice device = it->second.vkDevice;  // Use stored device directly
             if (device != VK_NULL_HANDLE) {
@@ -1561,8 +1601,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
                 }
             }
         }
+#endif
 
-#ifdef __APPLE__
+#ifdef OX_METAL
         // Destroy Metal textures if they were created
         if (it->second.graphicsAPI == GraphicsAPI::Metal && !it->second.metalTextures.empty()) {
             ReleaseMetalSwapchainTextures(it->second.metalTextures.data(),
@@ -1578,6 +1619,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
 }
 
 // Helper functions for swapchain image creation
+#ifdef OX_OPENGL
 static void CreateOpenGLTextures(SwapchainData& data, uint32_t numImages) {
     if (data.glTextureIds.empty()) {
         data.glTextureIds.resize(numImages);
@@ -1593,7 +1635,9 @@ static void CreateOpenGLTextures(SwapchainData& data, uint32_t numImages) {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 }
+#endif
 
+#ifdef OX_VULKAN
 static void CreateVulkanImages(SwapchainData& data, uint32_t numImages) {
     if (data.vkImages.empty() && data.vkDevice != VK_NULL_HANDLE && data.vkPhysicalDevice != VK_NULL_HANDLE) {
         data.vkImages.resize(numImages);
@@ -1682,8 +1726,9 @@ static void CreateVulkanImages(SwapchainData& data, uint32_t numImages) {
         data.vkImageMemory.resize(numImages, VK_NULL_HANDLE);
     }
 }
+#endif
 
-#ifdef __APPLE__
+#ifdef OX_METAL
 // Helper function to create Metal textures using Objective-C++ implementation
 static void CreateMetalTextures(SwapchainData& data, uint32_t numImages) {
     if (!data.metalDevice) {
@@ -1730,43 +1775,57 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
     XrStructureType imageType = images[0].type;
 
     // Create resources based on API
-    if (it->second.graphicsAPI == GraphicsAPI::OpenGL) {
-        CreateOpenGLTextures(it->second, numImages);
-    } else if (it->second.graphicsAPI == GraphicsAPI::Vulkan) {
-        CreateVulkanImages(it->second, numImages);
-    }
-#ifdef __APPLE__
-    else if (it->second.graphicsAPI == GraphicsAPI::Metal) {
-        CreateMetalTextures(it->second, numImages);
-    }
+    switch (it->second.graphicsAPI) {
+#ifdef OX_OPENGL
+        case GraphicsAPI::OpenGL:
+            CreateOpenGLTextures(it->second, numImages);
+            break;
 #endif
+#ifdef OX_VULKAN
+        case GraphicsAPI::Vulkan:
+            CreateVulkanImages(it->second, numImages);
+            break;
+#endif
+#ifdef OX_METAL
+        case GraphicsAPI::Metal:
+            CreateMetalTextures(it->second, numImages);
+            break;
+#endif
+    }
 
     // Populate the image array
     for (uint32_t i = 0; i < imageCapacityInput && i < numImages; ++i) {
-        if (it->second.graphicsAPI == GraphicsAPI::OpenGL) {
-            // Cast to OpenGL structure (works for both GL and GLES)
-            XrSwapchainImageOpenGLKHR* glImages = reinterpret_cast<XrSwapchainImageOpenGLKHR*>(images);
-            glImages[i].type = imageType;  // Preserve the original type
-            glImages[i].next = nullptr;
-            glImages[i].image = (i < it->second.glTextureIds.size()) ? it->second.glTextureIds[i] : 0;
-        } else if (it->second.graphicsAPI == GraphicsAPI::Vulkan) {
-            XrSwapchainImageVulkanKHR* vkImages = reinterpret_cast<XrSwapchainImageVulkanKHR*>(images);
-            vkImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR;
-            vkImages[i].next = nullptr;
-            vkImages[i].image = (i < it->second.vkImages.size()) ? it->second.vkImages[i] : VK_NULL_HANDLE;
-        }
-#ifdef __APPLE__
-        else if (it->second.graphicsAPI == GraphicsAPI::Metal) {
-            XrSwapchainImageMetalKHR* metalImages = reinterpret_cast<XrSwapchainImageMetalKHR*>(images);
-            metalImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
-            metalImages[i].next = nullptr;
-            metalImages[i].texture = (i < it->second.metalTextures.size()) ? it->second.metalTextures[i] : nullptr;
-        }
+        switch (it->second.graphicsAPI) {
+#ifdef OX_OPENGL
+            case GraphicsAPI::OpenGL:
+                // Cast to OpenGL structure (works for both GL and GLES)
+                XrSwapchainImageOpenGLKHR* glImages = reinterpret_cast<XrSwapchainImageOpenGLKHR*>(images);
+                glImages[i].type = imageType;  // Preserve the original type
+                glImages[i].next = nullptr;
+                glImages[i].image = (i < it->second.glTextureIds.size()) ? it->second.glTextureIds[i] : 0;
+                break;
 #endif
-        else {
-            // For other graphics APIs, just set the base header
-            images[i].type = imageType;
-            images[i].next = nullptr;
+#ifdef OX_VULKAN
+            case GraphicsAPI::Vulkan:
+                XrSwapchainImageVulkanKHR* vkImages = reinterpret_cast<XrSwapchainImageVulkanKHR*>(images);
+                vkImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR;
+                vkImages[i].next = nullptr;
+                vkImages[i].image = (i < it->second.vkImages.size()) ? it->second.vkImages[i] : VK_NULL_HANDLE;
+                break;
+#endif
+#ifdef OX_METAL
+            case GraphicsAPI::Metal:
+                XrSwapchainImageMetalKHR* metalImages = reinterpret_cast<XrSwapchainImageMetalKHR*>(images);
+                metalImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
+                metalImages[i].next = nullptr;
+                metalImages[i].texture = (i < it->second.metalTextures.size()) ? it->second.metalTextures[i] : nullptr;
+                break;
+#endif
+            default:
+                // For other graphics APIs, just set the base header
+                images[i].type = imageType;
+                images[i].next = nullptr;
+                break;
         }
     }
 
@@ -1883,18 +1942,21 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViveTrackerPathsHTCX(XrInstance instan
 }
 
 // OpenGL extension
+#ifdef OX_OPENGL
 XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
     XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsOpenGLKHR* graphicsRequirements) {
     LOG_DEBUG("xrGetOpenGLGraphicsRequirementsKHR called");
     if (!graphicsRequirements) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    graphicsRequirements->minApiVersionSupported = XR_MAKE_VERSION(3, 3, 0);
+    graphicsRequirements->minApiVersionSupported = XR_MAKE_VERSION(1, 1, 0);
     graphicsRequirements->maxApiVersionSupported = XR_MAKE_VERSION(4, 6, 0);
     return XR_SUCCESS;
 }
+#endif
 
 // Vulkan extension
+#ifdef OX_VULKAN
 XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsRequirementsKHR(
     XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsVulkanKHR* graphicsRequirements) {
     LOG_DEBUG("xrGetVulkanGraphicsRequirementsKHR called");
@@ -1913,8 +1975,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsRequirements2KHR(
     // Same implementation as xrGetVulkanGraphicsRequirementsKHR
     return xrGetVulkanGraphicsRequirementsKHR(instance, systemId, graphicsRequirements);
 }
+#endif
 
-#ifdef __APPLE__
+#ifdef OX_METAL
 // Metal extension
 XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId,
                                                                  XrGraphicsRequirementsMetalKHR* graphicsRequirements) {
@@ -1929,6 +1992,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance inst
 }
 #endif
 
+#ifdef OX_VULKAN
 XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanInstanceExtensionsKHR(XrInstance instance, XrSystemId systemId,
                                                                 uint32_t bufferCapacityInput,
                                                                 uint32_t* bufferCountOutput, char* buffer) {
@@ -2104,6 +2168,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateVulkanDeviceKHR(XrInstance instance,
     LOG_INFO("xrCreateVulkanDeviceKHR: Successfully created Vulkan device");
     return XR_SUCCESS;
 }
+#endif
 
 // Function map initialization
 static void InitializeFunctionMap() {
@@ -2176,8 +2241,11 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrReleaseSwapchainImage"] = reinterpret_cast<PFN_xrVoidFunction>(xrReleaseSwapchainImage);
     g_clientFunctionMap["xrStringToPath"] = reinterpret_cast<PFN_xrVoidFunction>(xrStringToPath);
     g_clientFunctionMap["xrPathToString"] = reinterpret_cast<PFN_xrVoidFunction>(xrPathToString);
+#ifdef OX_OPENGL
     g_clientFunctionMap["xrGetOpenGLGraphicsRequirementsKHR"] =
         reinterpret_cast<PFN_xrVoidFunction>(xrGetOpenGLGraphicsRequirementsKHR);
+#endif
+#ifdef OX_VULKAN
     g_clientFunctionMap["xrGetVulkanGraphicsRequirementsKHR"] =
         reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanGraphicsRequirementsKHR);
     g_clientFunctionMap["xrGetVulkanGraphicsRequirements2KHR"] =
@@ -2192,12 +2260,13 @@ static void InitializeFunctionMap() {
         reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanGraphicsDevice2KHR);
     g_clientFunctionMap["xrCreateVulkanInstanceKHR"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateVulkanInstanceKHR);
     g_clientFunctionMap["xrCreateVulkanDeviceKHR"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateVulkanDeviceKHR);
-    g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViveTrackerPathsHTCX);
-#ifdef __APPLE__
+#endif
+#ifdef OX_METAL
     g_clientFunctionMap["xrGetMetalGraphicsRequirementsKHR"] =
         reinterpret_cast<PFN_xrVoidFunction>(xrGetMetalGraphicsRequirementsKHR);
 #endif
+    g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViveTrackerPathsHTCX);
 }
 
 // xrGetInstanceProcAddr

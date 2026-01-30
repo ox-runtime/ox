@@ -88,6 +88,17 @@ if(APPLE)
     endif()
 endif()
 
+# Graphics API options with platform-specific defaults
+if(APPLE)
+    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
+    option(OX_VULKAN "Enable Vulkan graphics API support" OFF)
+    option(OX_METAL "Enable Metal graphics API support on macOS" ON)
+else()
+    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
+    option(OX_VULKAN "Enable Vulkan graphics API support" ON)
+    option(OX_METAL "Enable Metal graphics API support on macOS" OFF)
+endif()
+
 add_library(ox_runtime SHARED ${OX_RUNTIME_SOURCES})
 
 target_include_directories(ox_runtime PRIVATE
@@ -95,21 +106,35 @@ target_include_directories(ox_runtime PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# Define version macros for the runtime
+# Define version macros and graphics API support for the runtime
 target_compile_definitions(ox_runtime PRIVATE
     OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
     OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
 
-# Link OpenGL library for graphics support
-find_package(OpenGL REQUIRED)
-target_link_libraries(ox_runtime PRIVATE OpenGL::GL)
+# Define graphics API support macros
+if(OX_OPENGL)
+    target_compile_definitions(ox_runtime PRIVATE OX_OPENGL=1)
+endif()
+if(OX_VULKAN)
+    target_compile_definitions(ox_runtime PRIVATE OX_VULKAN=1)
+endif()
+if(OX_METAL)
+    target_compile_definitions(ox_runtime PRIVATE OX_METAL=1)
+endif()
 
-# Find Vulkan for graphics support
-find_package(Vulkan REQUIRED)
-target_link_libraries(ox_runtime PRIVATE Vulkan::Vulkan)
-target_include_directories(ox_runtime PRIVATE ${Vulkan_INCLUDE_DIRS})
+# Link graphics libraries conditionally
+if(OX_OPENGL)
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(ox_runtime PRIVATE OpenGL::GL)
+endif()
+
+if(OX_VULKAN)
+    find_package(Vulkan REQUIRED)
+    target_link_libraries(ox_runtime PRIVATE Vulkan::Vulkan)
+    target_include_directories(ox_runtime PRIVATE ${Vulkan_INCLUDE_DIRS})
+endif()
 
 # Add Metal framework for macOS
 if(APPLE AND OX_METAL)
