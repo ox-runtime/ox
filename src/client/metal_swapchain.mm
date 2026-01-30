@@ -27,21 +27,22 @@ static MTLPixelFormat MapFormatToMetal(int64_t format) {
 }
 
 bool CreateMetalSwapchainTextures(
-    void* metalDevice,
+    void* metalCommandQueue,
     uint32_t width,
     uint32_t height,
     int64_t format,
     uint32_t numImages,
     void** outTextures)
 {
-    if (!metalDevice || !outTextures || numImages == 0) {
+    if (!metalCommandQueue || !outTextures || numImages == 0) {
         LOG_ERROR("CreateMetalSwapchainTextures: Invalid parameters");
         return false;
     }
 
-    id<MTLDevice> device = (__bridge id<MTLDevice>)metalDevice;
+    id<MTLCommandQueue> commandQueue = (__bridge id<MTLCommandQueue>)metalCommandQueue;
+    id<MTLDevice> device = commandQueue.device;
     if (!device) {
-        LOG_ERROR("CreateMetalSwapchainTextures: Invalid Metal device");
+        LOG_ERROR("CreateMetalSwapchainTextures: Invalid Metal command queue");
         return false;
     }
 

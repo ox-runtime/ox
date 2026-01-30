@@ -18,7 +18,7 @@ namespace client {
 
 // Create Metal textures for swapchain
 // Returns true on success, false on failure
-bool CreateMetalSwapchainTextures(void* metalDevice,  // id<MTLDevice>
+bool CreateMetalSwapchainTextures(void* metalCommandQueue,  // id<MTLCommandQueue>
                                   uint32_t width, uint32_t height,
                                   int64_t format,  // MTLPixelFormat as int64_t
                                   uint32_t numImages,

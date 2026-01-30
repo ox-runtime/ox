@@ -109,7 +109,7 @@ struct SessionGraphicsBinding {
     VkInstance vkInstance = VK_NULL_HANDLE;
 #endif
 #ifdef OX_METAL
-    void* metalDevice = nullptr;  // id<MTLDevice> (opaque pointer to avoid Objective-C in C++)
+    void* metalCommandQueue = nullptr;  // id<MTLCommandQueue> (opaque pointer)
 #endif
     GraphicsAPI graphicsAPI = GraphicsAPI::OpenGL;
 };
@@ -125,8 +125,8 @@ struct SwapchainData {
     VkPhysicalDevice vkPhysicalDevice;          // Vulkan physical device
 #endif
 #ifdef OX_METAL
-    std::vector<void*> metalTextures;  // Metal textures (id<MTLTexture> as opaque pointers)
-    void* metalDevice = nullptr;       // Metal device (id<MTLDevice> as opaque pointer)
+    std::vector<void*> metalTextures;   // Metal textures (id<MTLTexture> as opaque pointers)
+    void* metalCommandQueue = nullptr;  // Metal command queue (id<MTLCommandQueue> as opaque pointer)
 #endif
     uint32_t width;
     uint32_t height;
@@ -833,10 +833,10 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
         if (header->type == XR_TYPE_GRAPHICS_BINDING_METAL_KHR) {
             hasGraphicsBinding = true;
             const XrGraphicsBindingMetalKHR* metalBinding = reinterpret_cast<const XrGraphicsBindingMetalKHR*>(header);
-            graphicsBinding.metalDevice = metalBinding->device;
+            graphicsBinding.metalCommandQueue = metalBinding->commandQueue;
             graphicsBinding.graphicsAPI = GraphicsAPI::Metal;
-            LOG_DEBUG(("xrCreateSession: Metal graphics binding - device=" +
-                       std::to_string(reinterpret_cast<uintptr_t>(metalBinding->device)))
+            LOG_DEBUG(("xrCreateSession: Metal graphics binding - commandQueue=" +
+                       std::to_string(reinterpret_cast<uintptr_t>(metalBinding->commandQueue)))
                           .c_str());
             break;
         }
@@ -1562,6 +1562,11 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
         data.graphicsAPI = graphicsIt->second.graphicsAPI;
 
         switch (data.graphicsAPI) {
+#ifdef OX_OPENGL
+            case GraphicsAPI::OpenGL:
+                // OpenGL doesn't need additional data storage here
+                break;
+#endif
 #ifdef OX_VULKAN
             case GraphicsAPI::Vulkan:
                 data.vkDevice = graphicsIt->second.vkDevice;
@@ -1570,10 +1575,14 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
 #endif
 #ifdef OX_METAL
             case GraphicsAPI::Metal:
-                data.metalDevice = graphicsIt->second.metalDevice;
-                LOG_DEBUG("Stored Metal device for swapchain");
+                // Store command queue for texture creation
+                data.metalCommandQueue = graphicsIt->second.metalCommandQueue;
+                LOG_DEBUG("Stored Metal command queue for swapchain");
                 break;
 #endif
+            default:
+                LOG_ERROR("Unsupported graphics API for swapchain data");
+                break;
         }
     }
 
@@ -1741,8 +1750,8 @@ static void CreateVulkanImages(SwapchainData& data, uint32_t numImages) {
 #ifdef OX_METAL
 // Helper function to create Metal textures using Objective-C++ implementation
 static void CreateMetalTextures(SwapchainData& data, uint32_t numImages) {
-    if (!data.metalDevice) {
-        LOG_ERROR("No Metal device available for swapchain texture creation");
+    if (!data.metalCommandQueue) {
+        LOG_ERROR("No Metal command queue available for swapchain texture creation");
         data.metalTextures.resize(numImages, nullptr);
         return;
     }
@@ -1751,7 +1760,7 @@ static void CreateMetalTextures(SwapchainData& data, uint32_t numImages) {
     data.metalTextures.resize(numImages, nullptr);
 
     // Create actual Metal textures using Objective-C++ implementation
-    bool success = CreateMetalSwapchainTextures(data.metalDevice, data.width, data.height, data.format, numImages,
+    bool success = CreateMetalSwapchainTextures(data.metalCommandQueue, data.width, data.height, data.format, numImages,
                                                 data.metalTextures.data());
 
     if (!success) {
@@ -1801,6 +1810,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
             CreateMetalTextures(it->second, numImages);
             break;
 #endif
+        default:
+            LOG_ERROR("Unsupported graphics API for swapchain creation");
+            return XR_ERROR_GRAPHICS_REQUIREMENTS_CALL_MISSING;
     }
 
     // Populate the image array
@@ -2000,8 +2012,8 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance inst
         return XR_ERROR_VALIDATION_FAILURE;
     }
     // Support Metal 1.0 and above
-    graphicsRequirements->minMetalVersion = XR_MAKE_VERSION(1, 0, 0);
-    graphicsRequirements->maxMetalVersion = XR_MAKE_VERSION(3, 0, 0);
+    graphicsRequirements->minMetalVersionSupported = XR_MAKE_VERSION(1, 0, 0);
+    graphicsRequirements->maxMetalVersionSupported = XR_MAKE_VERSION(3, 0, 0);
     return XR_SUCCESS;
 }
 #endif

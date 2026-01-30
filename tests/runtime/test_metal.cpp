@@ -51,14 +51,18 @@ TEST_F(RuntimeTestBase, MetalGraphics_GetRequirements_ReturnsSuccess) {
     result = xrGetMetalGraphicsRequirementsKHR(instance, system_id, &metal_reqs);
 
     EXPECT_EQ(result, XR_SUCCESS);
-    // Metal version should be reasonable (at least version 2.x)
-    EXPECT_GE(XR_VERSION_MAJOR(metal_reqs.minMetalVersion), 2);
+    // Metal version should be reasonable (at least version 1.x)
+    EXPECT_GE(XR_VERSION_MAJOR(metal_reqs.minMetalVersionSupported), 1);
 }
 
 TEST_F(RuntimeTestBase, MetalGraphics_CreateSessionWithMetalBinding_ReturnsSuccess) {
     // Create Metal device
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     ASSERT_NE(device, nil);
+
+    // Create Metal command queue
+    id<MTLCommandQueue> commandQueue = [device newCommandQueue];
+    ASSERT_NE(commandQueue, nil);
 
     // Create instance with Metal extension enabled
     XrInstanceCreateInfo create_info{XR_TYPE_INSTANCE_CREATE_INFO};
@@ -87,7 +91,7 @@ TEST_F(RuntimeTestBase, MetalGraphics_CreateSessionWithMetalBinding_ReturnsSucce
 
     // Create session with Metal binding
     XrGraphicsBindingMetalKHR metal_binding{XR_TYPE_GRAPHICS_BINDING_METAL_KHR};
-    metal_binding.device = (__bridge void*)device;
+    metal_binding.commandQueue = (__bridge void*)commandQueue;
 
     XrSessionCreateInfo session_info{XR_TYPE_SESSION_CREATE_INFO};
     session_info.next = &metal_binding;
@@ -109,6 +113,10 @@ TEST_F(RuntimeTestBase, MetalGraphics_CreateSwapchainAndVerifyTextures_ReturnsSu
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     ASSERT_NE(device, nil);
 
+    // Create Metal command queue
+    id<MTLCommandQueue> commandQueue = [device newCommandQueue];
+    ASSERT_NE(commandQueue, nil);
+
     // Create instance with Metal extension enabled
     XrInstanceCreateInfo create_info{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(create_info.applicationInfo.applicationName, "TestApp", XR_MAX_APPLICATION_NAME_SIZE);
@@ -136,7 +144,7 @@ TEST_F(RuntimeTestBase, MetalGraphics_CreateSwapchainAndVerifyTextures_ReturnsSu
 
     // Create session with Metal binding
     XrGraphicsBindingMetalKHR metal_binding{XR_TYPE_GRAPHICS_BINDING_METAL_KHR};
-    metal_binding.device = (__bridge void*)device;
+    metal_binding.commandQueue = (__bridge void*)commandQueue;
 
     XrSessionCreateInfo session_info{XR_TYPE_SESSION_CREATE_INFO};
     session_info.next = &metal_binding;

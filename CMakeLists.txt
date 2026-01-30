@@ -183,6 +183,7 @@ if(WIN32)
 elseif(APPLE)
     target_compile_definitions(ox_runtime PRIVATE
         XR_USE_PLATFORM_MACOS
+        GL_SILENCE_DEPRECATION
     )
     # For macOS, set the DYLIB versioning
     set_target_properties(ox_runtime PROPERTIES
