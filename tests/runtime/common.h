@@ -77,51 +77,6 @@ class MockServiceConnection : public client::IServiceConnection {
     static ox::protocol::ControlChannel dummy_control_channel_;
 };
 
-const ox::protocol::RuntimePropertiesResponse MockServiceConnection::runtime_props_ = []() {
-    ox::protocol::RuntimePropertiesResponse props = {};
-    strcpy(props.runtime_name, "ox Mock Runtime");
-    props.runtime_version_major = 1;
-    props.runtime_version_minor = 0;
-    props.runtime_version_patch = 0;
-    props.padding = 0;
-    return props;
-}();
-
-const ox::protocol::SystemPropertiesResponse MockServiceConnection::system_props_ = []() {
-    ox::protocol::SystemPropertiesResponse props = {};
-    strcpy(props.system_name, "Mock VR System");
-    props.max_swapchain_width = 2048;
-    props.max_swapchain_height = 2048;
-    props.max_layer_count = 16;
-    props.orientation_tracking = 1;
-    props.position_tracking = 1;
-    props.padding[0] = 0;
-    props.padding[1] = 0;
-    return props;
-}();
-
-const ox::protocol::ViewConfigurationsResponse MockServiceConnection::view_configs_ = []() {
-    ox::protocol::ViewConfigurationsResponse configs = {};
-    configs.views[0].recommended_width = 1832;
-    configs.views[0].recommended_height = 1920;
-    configs.views[0].recommended_sample_count = 1;
-    configs.views[0].max_sample_count = 4;
-    configs.views[1].recommended_width = 1832;
-    configs.views[1].recommended_height = 1920;
-    configs.views[1].recommended_sample_count = 1;
-    configs.views[1].max_sample_count = 4;
-    return configs;
-}();
-
-const ox::protocol::InteractionProfilesResponse MockServiceConnection::interaction_profiles_ = []() {
-    ox::protocol::InteractionProfilesResponse profiles = {};
-    profiles.profile_count = 1;
-    strcpy(profiles.profiles[0], "/interaction_profiles/khr/simple_controller");
-    return profiles;
-}();
-
-ox::protocol::ControlChannel MockServiceConnection::dummy_control_channel_ = {};
-
 // Base test fixture for runtime tests
 class RuntimeTestBase : public ::testing::Test {
    protected:

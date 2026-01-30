@@ -1,6 +1,6 @@
 add_executable(runtime_tests
     test_runtime.cpp
-    test_metal.cpp
+    test_metal.mm
     ../../src/client/runtime.cpp
     ../../src/logging.cpp
     common.h
