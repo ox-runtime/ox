@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(ox VERSION 0.4.0 LANGUAGES CXX)
+project(ox VERSION 0.4.1 LANGUAGES CXX)
 
 include(FetchContent)
 
