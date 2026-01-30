@@ -67,6 +67,12 @@
 using namespace ox::client;
 using namespace ox::protocol;
 
+// Conditional defines for static builds (disable export attributes)
+#ifdef OX_BUILD_STATIC
+#define XRAPI_ATTR
+#define XRAPI_CALL
+#endif
+
 // Graphics API enumeration
 enum class GraphicsAPI { OpenGL, Vulkan, Metal };
 
@@ -78,7 +84,11 @@ enum class GraphicsAPI { OpenGL, Vulkan, Metal };
 #endif
 
 // Global service connection - can be overridden by tests
+#ifdef OX_BUILD_STATIC
+static IServiceConnection* g_service_connection = nullptr;
+#else
 static IServiceConnection* g_service_connection = &ServiceConnection::Instance();
+#endif
 
 // For testing: Allow injection of a mock service connection
 // Note: This must be called before creating any OpenXR instances
@@ -1797,35 +1807,39 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
     for (uint32_t i = 0; i < imageCapacityInput && i < numImages; ++i) {
         switch (it->second.graphicsAPI) {
 #ifdef OX_OPENGL
-            case GraphicsAPI::OpenGL:
+            case GraphicsAPI::OpenGL: {
                 // Cast to OpenGL structure (works for both GL and GLES)
                 XrSwapchainImageOpenGLKHR* glImages = reinterpret_cast<XrSwapchainImageOpenGLKHR*>(images);
                 glImages[i].type = imageType;  // Preserve the original type
                 glImages[i].next = nullptr;
                 glImages[i].image = (i < it->second.glTextureIds.size()) ? it->second.glTextureIds[i] : 0;
                 break;
+            }
 #endif
 #ifdef OX_VULKAN
-            case GraphicsAPI::Vulkan:
+            case GraphicsAPI::Vulkan: {
                 XrSwapchainImageVulkanKHR* vkImages = reinterpret_cast<XrSwapchainImageVulkanKHR*>(images);
                 vkImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR;
                 vkImages[i].next = nullptr;
                 vkImages[i].image = (i < it->second.vkImages.size()) ? it->second.vkImages[i] : VK_NULL_HANDLE;
                 break;
+            }
 #endif
 #ifdef OX_METAL
-            case GraphicsAPI::Metal:
+            case GraphicsAPI::Metal: {
                 XrSwapchainImageMetalKHR* metalImages = reinterpret_cast<XrSwapchainImageMetalKHR*>(images);
                 metalImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
                 metalImages[i].next = nullptr;
                 metalImages[i].texture = (i < it->second.metalTextures.size()) ? it->second.metalTextures[i] : nullptr;
                 break;
+            }
 #endif
-            default:
+            default: {
                 // For other graphics APIs, just set the base header
                 images[i].type = imageType;
                 images[i].next = nullptr;
                 break;
+            }
         }
     }
 

@@ -1,63 +1,19 @@
-/**
- * Runtime Tests
- *
- * Tests basic OpenXR runtime functions including instance creation,
- * system enumeration, and path handling using Google Test.
- */
-
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <openxr/openxr.h>
 
 #include <cstring>
+#include <memory>
 #include <string>
+#include <vector>
 
-namespace ox {
-namespace test {
-
-// Test fixture for runtime tests
-class RuntimeTest : public ::testing::Test {
-   protected:
-    void SetUp() override {
-        // Tests will use the runtime via XR_RUNTIME_JSON environment variable
-    }
-
-    void TearDown() override {
-        // Cleanup any created instances
-        for (XrInstance instance : created_instances_) {
-            if (instance != XR_NULL_HANDLE) {
-                xrDestroyInstance(instance);
-            }
-        }
-        created_instances_.clear();
-    }
-
-    // Helper to create a basic instance
-    XrInstance CreateBasicInstance(const std::string& app_name = "TestApp") {
-        XrInstanceCreateInfo create_info{XR_TYPE_INSTANCE_CREATE_INFO};
-        std::strncpy(create_info.applicationInfo.applicationName, app_name.c_str(), XR_MAX_APPLICATION_NAME_SIZE);
-        create_info.applicationInfo.applicationVersion = 1;
-        std::strncpy(create_info.applicationInfo.engineName, "TestEngine", XR_MAX_ENGINE_NAME_SIZE);
-        create_info.applicationInfo.engineVersion = 1;
-        create_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
-
-        XrInstance instance = XR_NULL_HANDLE;
-        XrResult result = xrCreateInstance(&create_info, &instance);
-
-        if (result == XR_SUCCESS && instance != XR_NULL_HANDLE) {
-            created_instances_.push_back(instance);
-        }
-
-        return instance;
-    }
-
-    std::vector<XrInstance> created_instances_;
-};
+#include "common.h"
 
 // ============================================================================
 // Instance Tests
 // ============================================================================
 
-TEST_F(RuntimeTest, CreateInstance_ValidParams_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, CreateInstance_ValidParams_ReturnsSuccess) {
     XrInstanceCreateInfo create_info{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(create_info.applicationInfo.applicationName, "TestApp", XR_MAX_APPLICATION_NAME_SIZE);
     create_info.applicationInfo.applicationVersion = 1;
@@ -76,7 +32,7 @@ TEST_F(RuntimeTest, CreateInstance_ValidParams_ReturnsSuccess) {
     }
 }
 
-TEST_F(RuntimeTest, CreateInstance_NullCreateInfo_ReturnsError) {
+TEST_F(RuntimeTestBase, CreateInstance_NullCreateInfo_ReturnsError) {
     XrInstance instance = XR_NULL_HANDLE;
     XrResult result = xrCreateInstance(nullptr, &instance);
 
@@ -84,7 +40,7 @@ TEST_F(RuntimeTest, CreateInstance_NullCreateInfo_ReturnsError) {
     EXPECT_EQ(instance, XR_NULL_HANDLE);
 }
 
-TEST_F(RuntimeTest, CreateInstance_NullInstanceOut_ReturnsError) {
+TEST_F(RuntimeTestBase, CreateInstance_NullInstanceOut_ReturnsError) {
     XrInstanceCreateInfo create_info{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(create_info.applicationInfo.applicationName, "TestApp", XR_MAX_APPLICATION_NAME_SIZE);
     create_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
@@ -94,7 +50,7 @@ TEST_F(RuntimeTest, CreateInstance_NullInstanceOut_ReturnsError) {
     EXPECT_EQ(result, XR_ERROR_VALIDATION_FAILURE);
 }
 
-TEST_F(RuntimeTest, DestroyInstance_ValidInstance_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, DestroyInstance_ValidInstance_ReturnsSuccess) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -106,12 +62,12 @@ TEST_F(RuntimeTest, DestroyInstance_ValidInstance_ReturnsSuccess) {
                              created_instances_.end());
 }
 
-TEST_F(RuntimeTest, DestroyInstance_NullHandle_ReturnsError) {
+TEST_F(RuntimeTestBase, DestroyInstance_NullHandle_ReturnsError) {
     XrResult result = xrDestroyInstance(XR_NULL_HANDLE);
     EXPECT_EQ(result, XR_ERROR_HANDLE_INVALID);
 }
 
-TEST_F(RuntimeTest, GetInstanceProperties_ValidInstance_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, GetInstanceProperties_ValidInstance_ReturnsSuccess) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -122,7 +78,7 @@ TEST_F(RuntimeTest, GetInstanceProperties_ValidInstance_ReturnsSuccess) {
     EXPECT_GT(std::strlen(props.runtimeName), 0u) << "Runtime name should not be empty";
 }
 
-TEST_F(RuntimeTest, GetInstanceProperties_NullProperties_ReturnsError) {
+TEST_F(RuntimeTestBase, GetInstanceProperties_NullProperties_ReturnsError) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -134,7 +90,7 @@ TEST_F(RuntimeTest, GetInstanceProperties_NullProperties_ReturnsError) {
 // String Conversion Tests
 // ============================================================================
 
-TEST_F(RuntimeTest, StringToPath_ValidPath_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, StringToPath_ValidPath_ReturnsSuccess) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -145,7 +101,7 @@ TEST_F(RuntimeTest, StringToPath_ValidPath_ReturnsSuccess) {
     EXPECT_NE(path, XR_NULL_PATH);
 }
 
-TEST_F(RuntimeTest, StringToPath_NullString_ReturnsError) {
+TEST_F(RuntimeTestBase, StringToPath_NullString_ReturnsError) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -155,7 +111,7 @@ TEST_F(RuntimeTest, StringToPath_NullString_ReturnsError) {
     EXPECT_EQ(result, XR_ERROR_VALIDATION_FAILURE);
 }
 
-TEST_F(RuntimeTest, PathToString_ValidPath_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, PathToString_ValidPath_ReturnsSuccess) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -184,7 +140,7 @@ TEST_F(RuntimeTest, PathToString_ValidPath_ReturnsSuccess) {
 // System Tests
 // ============================================================================
 
-TEST_F(RuntimeTest, GetSystem_ValidFormFactor_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, GetSystem_ValidFormFactor_ReturnsSuccess) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -198,7 +154,7 @@ TEST_F(RuntimeTest, GetSystem_ValidFormFactor_ReturnsSuccess) {
     EXPECT_NE(system_id, XR_NULL_SYSTEM_ID);
 }
 
-TEST_F(RuntimeTest, GetSystem_NullSystemInfo_ReturnsError) {
+TEST_F(RuntimeTestBase, GetSystem_NullSystemInfo_ReturnsError) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -208,7 +164,7 @@ TEST_F(RuntimeTest, GetSystem_NullSystemInfo_ReturnsError) {
     EXPECT_EQ(result, XR_ERROR_VALIDATION_FAILURE);
 }
 
-TEST_F(RuntimeTest, GetSystemProperties_ValidSystem_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, GetSystemProperties_ValidSystem_ReturnsSuccess) {
     XrInstance instance = CreateBasicInstance();
     ASSERT_NE(instance, XR_NULL_HANDLE);
 
@@ -230,7 +186,7 @@ TEST_F(RuntimeTest, GetSystemProperties_ValidSystem_ReturnsSuccess) {
 // Extension Tests
 // ============================================================================
 
-TEST_F(RuntimeTest, EnumerateInstanceExtensionProperties_GetCount_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, EnumerateInstanceExtensionProperties_GetCount_ReturnsSuccess) {
     uint32_t count = 0;
     XrResult result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr);
 
@@ -238,7 +194,7 @@ TEST_F(RuntimeTest, EnumerateInstanceExtensionProperties_GetCount_ReturnsSuccess
     EXPECT_GT(count, 0u) << "Should have at least one extension";
 }
 
-TEST_F(RuntimeTest, EnumerateInstanceExtensionProperties_GetExtensions_ReturnsSuccess) {
+TEST_F(RuntimeTestBase, EnumerateInstanceExtensionProperties_GetExtensions_ReturnsSuccess) {
     uint32_t count = 0;
     XrResult result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr);
     ASSERT_EQ(result, XR_SUCCESS);
@@ -260,6 +216,3 @@ TEST_F(RuntimeTest, EnumerateInstanceExtensionProperties_GetExtensions_ReturnsSu
     }
     EXPECT_TRUE(has_named_extension) << "At least one extension should have a name";
 }
-
-}  // namespace test
-}  // namespace ox

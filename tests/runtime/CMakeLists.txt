@@ -1,52 +1,42 @@
-cmake_minimum_required(VERSION 3.15)
-
-# Runtime tests executable
 add_executable(runtime_tests
-    runtime_tests.cpp
-    mock_service_connection.h
-    mock_service_connection.cpp
-    ../../src/logging.cpp  # Include logging implementation
+    test_runtime.cpp
+    ../../src/client/runtime.cpp
+    ../../src/logging.cpp
+    common.h
+)
+
+# Force gtest to use shared CRT to match the runtime tests
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+target_compile_options(runtime_tests PRIVATE
+    $<$<CONFIG:Release>:/MD>
+    $<$<CONFIG:Debug>:/MDd>
 )
 
 target_include_directories(runtime_tests PRIVATE
     ${OPENXR_INCLUDE_DIR}
-    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/client
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# Define OX_RUNTIME_TESTS to enable mock service connection by default
-target_compile_definitions(runtime_tests PRIVATE OX_RUNTIME_TESTS)
+target_compile_definitions(runtime_tests PRIVATE
+    OX_BUILD_STATIC
+    OX_RUNTIME_TESTS
+)
 
-# Link against GTest, OpenXR loader, and ox runtime
-# Tests use the loader to call runtime functions, with mock service injected
 target_link_libraries(runtime_tests PRIVATE
     GTest::gtest_main
-    openxr_loader
-    ox_runtime
+    GTest::gmock
 )
 
-# Use /MD for this target to match openxr_loader
-if(WIN32 AND MSVC)
-    target_compile_options(runtime_tests PRIVATE /MD$<$<CONFIG:Debug>:d>)
-endif()
+configure_graphics(runtime_tests)
 
-# Set XR_RUNTIME_JSON to use our runtime with mock service
-gtest_discover_tests(runtime_tests
-    PROPERTIES
-        ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_BINARY_DIR}/bin/ox_openxr.json"
-)
+gtest_discover_tests(runtime_tests)
 
 # Set output directory
 set_target_properties(runtime_tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin/tests
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/tests
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests/runtime
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin/tests/runtime
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/tests/runtime
 )
-
-# Copy ox.dll to test directory on Windows for runtime linking
-if(WIN32)
-    add_custom_command(TARGET runtime_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:ox_runtime>
-        $<TARGET_FILE_DIR:runtime_tests>
-    )
-endif()

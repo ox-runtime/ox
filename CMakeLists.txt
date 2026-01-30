@@ -99,6 +99,39 @@ else()
     option(OX_METAL "Enable Metal graphics API support on macOS" OFF)
 endif()
 
+# Function to configure graphics APIs for a target
+function(configure_graphics target)
+    # Define graphics API support macros
+    if(OX_OPENGL)
+        target_compile_definitions(${target} PRIVATE OX_OPENGL=1)
+    endif()
+    if(OX_VULKAN)
+        target_compile_definitions(${target} PRIVATE OX_VULKAN=1)
+    endif()
+    if(OX_METAL)
+        target_compile_definitions(${target} PRIVATE OX_METAL=1)
+    endif()
+
+    # Link graphics libraries conditionally
+    if(OX_OPENGL)
+        find_package(OpenGL REQUIRED)
+        target_link_libraries(${target} PRIVATE OpenGL::GL)
+    endif()
+
+    if(OX_VULKAN)
+        find_package(Vulkan REQUIRED)
+        target_link_libraries(${target} PRIVATE Vulkan::Vulkan)
+        target_include_directories(${target} PRIVATE ${Vulkan_INCLUDE_DIRS})
+    endif()
+
+    # Add Metal framework for macOS
+    if(APPLE AND OX_METAL)
+        find_library(METAL_LIBRARY Metal REQUIRED)
+        find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)
+        target_link_libraries(${target} PRIVATE ${METAL_LIBRARY} ${QUARTZCORE_LIBRARY})
+    endif()
+endfunction()
+
 add_library(ox_runtime SHARED ${OX_RUNTIME_SOURCES})
 
 target_include_directories(ox_runtime PRIVATE
@@ -113,36 +146,7 @@ target_compile_definitions(ox_runtime PRIVATE
     OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
 
-# Define graphics API support macros
-if(OX_OPENGL)
-    target_compile_definitions(ox_runtime PRIVATE OX_OPENGL=1)
-endif()
-if(OX_VULKAN)
-    target_compile_definitions(ox_runtime PRIVATE OX_VULKAN=1)
-endif()
-if(OX_METAL)
-    target_compile_definitions(ox_runtime PRIVATE OX_METAL=1)
-endif()
-
-# Link graphics libraries conditionally
-if(OX_OPENGL)
-    find_package(OpenGL REQUIRED)
-    target_link_libraries(ox_runtime PRIVATE OpenGL::GL)
-endif()
-
-if(OX_VULKAN)
-    find_package(Vulkan REQUIRED)
-    target_link_libraries(ox_runtime PRIVATE Vulkan::Vulkan)
-    target_include_directories(ox_runtime PRIVATE ${Vulkan_INCLUDE_DIRS})
-endif()
-
-# Add Metal framework for macOS
-if(APPLE AND OX_METAL)
-    find_library(METAL_LIBRARY Metal REQUIRED)
-    find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)
-    target_link_libraries(ox_runtime PRIVATE ${METAL_LIBRARY} ${QUARTZCORE_LIBRARY})
-    target_compile_definitions(ox_runtime PRIVATE OX_METAL=1)
-endif()
+configure_graphics(ox_runtime)
 
 # Set output directory to build/bin (disable per-config subdirectories)
 set_target_properties(ox_runtime PROPERTIES
