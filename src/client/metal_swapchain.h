@@ -24,6 +24,10 @@ bool CreateMetalSwapchainTextures(void* metalCommandQueue,  // id<MTLCommandQueu
                                   uint32_t numImages,
                                   void** outTextures);  // Array of id<MTLTexture> to fill
 
+// Get the default Metal device
+// Returns id<MTLDevice> as void*
+void* GetMetalDefaultDevice();
+
 // Release Metal textures
 void ReleaseMetalSwapchainTextures(void** textures, uint32_t numTextures);
 

@@ -143,6 +143,11 @@ std::vector<int64_t> GetSupportedMetalFormats() {
     };
 }
 
+void* GetMetalDefaultDevice() {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    return (__bridge void*)device;
+}
+
 }  // namespace client
 }  // namespace ox
 

@@ -2011,9 +2011,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance inst
     if (!graphicsRequirements) {
         return XR_ERROR_VALIDATION_FAILURE;
     }
-    // Support Metal 1.0 and above
-    graphicsRequirements->minMetalVersionSupported = XR_MAKE_VERSION(1, 0, 0);
-    graphicsRequirements->maxMetalVersionSupported = XR_MAKE_VERSION(3, 0, 0);
+    graphicsRequirements->type = XR_TYPE_GRAPHICS_REQUIREMENTS_METAL_KHR;
+    graphicsRequirements->next = nullptr;
+    graphicsRequirements->metalDevice = GetMetalDefaultDevice();
     return XR_SUCCESS;
 }
 #endif

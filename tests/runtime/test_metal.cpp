@@ -51,8 +51,8 @@ TEST_F(RuntimeTestBase, MetalGraphics_GetRequirements_ReturnsSuccess) {
     result = xrGetMetalGraphicsRequirementsKHR(instance, system_id, &metal_reqs);
 
     EXPECT_EQ(result, XR_SUCCESS);
-    // Metal version should be reasonable (at least version 1.x)
-    EXPECT_GE(XR_VERSION_MAJOR(metal_reqs.minMetalVersionSupported), 1);
+    // Metal device should be returned
+    EXPECT_NE(metal_reqs.metalDevice, nullptr);
 }
 
 TEST_F(RuntimeTestBase, MetalGraphics_CreateSessionWithMetalBinding_ReturnsSuccess) {
