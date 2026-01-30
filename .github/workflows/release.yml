@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+    - name: Checkout ox
+      uses: actions/checkout@v4
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-dev libx11-dev
+
+    - name: Build ox
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --config Release
+
+    - name: Download ox-simulator
+      shell: bash
+      run: |
+        PLATFORM="linux"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          PLATFORM="win"
+        fi
+        RELEASE_URL = "https://github.com/ox-runtime/ox-simulator/releases/latest/download"
+        curl -L -o ox-simulator.zip "$RELEASE_URL/ox-simulator-driver-only-${PLATFORM}-x64.zip"
+
+    - name: Unzip ox-simulator
+      shell: bash
+      run: |
+        mkdir -p ox/build/bin/drivers
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          unzip ox-simulator.zip -d ox/build/bin/drivers/
+        else
+          powershell -Command "Expand-Archive -Path ox-simulator.zip -DestinationPath ox/build/bin/drivers/"
+        fi
+
+    - name: Create zip
+      shell: bash
+      run: |
+        cd ox/build/bin
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ZIP_FILE_NAME="ox-runtime-win-x64.zip"
+          powershell -Command "Compress-Archive -Path * -DestinationPath ../$ZIP_FILE_NAME"
+        else
+          ZIP_FILE_NAME="ox-runtime-linux-x64.zip"
+          zip -r ../$ZIP_FILE_NAME .
+        fi
+        echo "ZIP_FILE=$ZIP_FILE_NAME" >> $GITHUB_ENV
+
+    - name: Set ox_driver.h path
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          echo "HEADER_FILE=include/ox_driver.h" >> $GITHUB_ENV
+        else
+          echo "HEADER_FILE=" >> $GITHUB_ENV
+        fi
+
+    - name: Upload release asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ox/build/${{ env.ZIP_FILE }}
+          ${{ env.HEADER_FILE }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
