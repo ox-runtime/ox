@@ -105,13 +105,13 @@ endif()
 function(configure_graphics target)
     # Define graphics API support macros
     if(OX_OPENGL)
-        target_compile_definitions(${target} PRIVATE OX_OPENGL=1)
+        target_compile_definitions(${target} PRIVATE OX_OPENGL=1 XR_USE_GRAPHICS_API_OPENGL=1)
     endif()
     if(OX_VULKAN)
-        target_compile_definitions(${target} PRIVATE OX_VULKAN=1)
+        target_compile_definitions(${target} PRIVATE OX_VULKAN=1 XR_USE_GRAPHICS_API_VULKAN=1)
     endif()
     if(OX_METAL)
-        target_compile_definitions(${target} PRIVATE OX_METAL=1)
+        target_compile_definitions(${target} PRIVATE OX_METAL=1 XR_KHR_metal_enable=1)
     endif()
 
     # Link graphics libraries conditionally
