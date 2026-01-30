@@ -48,17 +48,18 @@ jobs:
     - name: Unzip ox-simulator
       shell: bash
       run: |
-        mkdir -p ox/build/bin/drivers
+        mkdir -p build/bin/drivers
         if [ "$RUNNER_OS" == "Linux" ]; then
-          unzip ox-simulator.zip -d ox/build/bin/drivers/
+          unzip ox-simulator.zip -d build/bin/drivers/
         else
-          powershell -Command "Expand-Archive -Path ox-simulator.zip -DestinationPath ox/build/bin/drivers/"
+          powershell -Command "Expand-Archive -Path ox-simulator.zip -DestinationPath build/bin/drivers/"
         fi
 
     - name: Create zip
       shell: bash
       run: |
-        cd ox/build/bin
+        cd build/bin
+        rm -rf tests
         if [ "$RUNNER_OS" == "Windows" ]; then
           ZIP_FILE_NAME="ox-runtime-win-x64.zip"
           powershell -Command "Compress-Archive -Path * -DestinationPath ../$ZIP_FILE_NAME"
@@ -81,7 +82,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          ox/build/${{ env.ZIP_FILE }}
+          build/${{ env.ZIP_FILE }}
           ${{ env.HEADER_FILE }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
