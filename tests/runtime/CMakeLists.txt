@@ -7,11 +7,13 @@ add_executable(runtime_tests
 )
 
 # Force gtest to use shared CRT to match the runtime tests
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+if(MSVC)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+endif()
 
 target_compile_options(runtime_tests PRIVATE
-    $<$<CONFIG:Release>:/MD>
-    $<$<CONFIG:Debug>:/MDd>
+    $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/MD>
+    $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:MSVC>>:/MDd>
 )
 
 target_include_directories(runtime_tests PRIVATE
