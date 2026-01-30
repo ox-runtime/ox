@@ -10,7 +10,7 @@
 #include "common.h"
 
 #ifdef OX_METAL
-// Define Metal extension before including platform headers
+#define XR_USE_GRAPHICS_API_METAL
 #define XR_KHR_metal_enable
 #include <Metal/Metal.h>
 #include <openxr/openxr_platform.h>
