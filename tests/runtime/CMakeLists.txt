@@ -13,12 +13,15 @@ target_include_directories(runtime_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
+# Define OX_RUNTIME_TESTS to enable mock service connection by default
+target_compile_definitions(runtime_tests PRIVATE OX_RUNTIME_TESTS)
+
 # Link against GTest, OpenXR loader, and ox runtime
 # Tests use the loader to call runtime functions, with mock service injected
 target_link_libraries(runtime_tests PRIVATE
     GTest::gtest_main
     openxr_loader
-    ox
+    ox_runtime
 )
 
 # Use /MD for this target to match openxr_loader
@@ -43,7 +46,7 @@ set_target_properties(runtime_tests PROPERTIES
 if(WIN32)
     add_custom_command(TARGET runtime_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:ox>
+        $<TARGET_FILE:ox_runtime>
         $<TARGET_FILE_DIR:runtime_tests>
     )
 endif()

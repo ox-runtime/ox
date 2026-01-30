@@ -24,8 +24,8 @@ The current active OpenXR runtime is: ox
 ```
 
 The build produces (in `./build/bin/`):
-- **Windows**: `ox.dll` and `ox_openxr.json`
-- **Linux**: `libox.so` and `ox_openxr.json`
+- **Windows**: `ox_runtime.dll` and `ox_openxr.json`
+- **Linux**: `libox_runtime.so` and `ox_openxr.json`
 
 ## Using the Runtime
 

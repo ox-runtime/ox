@@ -70,19 +70,19 @@ set_target_properties(ox-service PROPERTIES
 )
 
 # Client library (runtime DLL)
-add_library(ox SHARED
+add_library(ox_runtime SHARED
     src/client/runtime.cpp
     src/client/service_connection.cpp
     src/logging.cpp
 )
 
-target_include_directories(ox PRIVATE
+target_include_directories(ox_runtime PRIVATE
     ${OPENXR_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # Define version macros for the runtime
-target_compile_definitions(ox PRIVATE
+target_compile_definitions(ox_runtime PRIVATE
     OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
     OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
@@ -90,15 +90,15 @@ target_compile_definitions(ox PRIVATE
 
 # Link OpenGL library for graphics support
 find_package(OpenGL REQUIRED)
-target_link_libraries(ox PRIVATE OpenGL::GL)
+target_link_libraries(ox_runtime PRIVATE OpenGL::GL)
 
 # Find Vulkan for graphics support
 find_package(Vulkan REQUIRED)
-target_link_libraries(ox PRIVATE Vulkan::Vulkan)
-target_include_directories(ox PRIVATE ${Vulkan_INCLUDE_DIRS})
+target_link_libraries(ox_runtime PRIVATE Vulkan::Vulkan)
+target_include_directories(ox_runtime PRIVATE ${Vulkan_INCLUDE_DIRS})
 
 # Set output directory to build/bin (disable per-config subdirectories)
-set_target_properties(ox PROPERTIES
+set_target_properties(ox_runtime PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
@@ -113,26 +113,26 @@ set_target_properties(ox PROPERTIES
 
 # Platform-specific settings
 if(WIN32)
-    target_compile_definitions(ox PRIVATE
+    target_compile_definitions(ox_runtime PRIVATE
         XR_USE_PLATFORM_WIN32
     )
     # Export symbols for Windows DLL
-    target_compile_definitions(ox PRIVATE
+    target_compile_definitions(ox_runtime PRIVATE
         XR_RUNTIME_EXPORTS
     )
-    set(RUNTIME_LIBRARY_NAME "ox.dll")
-    set(RUNTIME_LIBRARY_PATH "./ox.dll")
+    set(RUNTIME_LIBRARY_NAME "ox_runtime.dll")
+    set(RUNTIME_LIBRARY_PATH "./ox_runtime.dll")
 elseif(UNIX)
-    target_compile_definitions(ox PRIVATE
+    target_compile_definitions(ox_runtime PRIVATE
         XR_USE_PLATFORM_XLIB
     )
     # For Linux, set the SONAME
-    set_target_properties(ox PROPERTIES
+    set_target_properties(ox_runtime PROPERTIES
         VERSION ${PROJECT_VERSION}
         SOVERSION 1
     )
-    set(RUNTIME_LIBRARY_NAME "libox.so")
-    set(RUNTIME_LIBRARY_PATH "./libox.so")
+    set(RUNTIME_LIBRARY_NAME "libox_runtime.so")
+    set(RUNTIME_LIBRARY_PATH "./libox_runtime.so")
 endif()
 
 # Generate the OpenXR runtime manifest JSON file
@@ -144,13 +144,13 @@ configure_file(
 )
 
 # Install the runtime library and service
-install(TARGETS ox ox-service
+install(TARGETS ox_runtime ox-service
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 
 # Print build completion message
-add_custom_command(TARGET ox POST_BUILD
+add_custom_command(TARGET ox_runtime POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "====================================================================="
     COMMAND ${CMAKE_COMMAND} -E echo "Build complete!"
@@ -164,14 +164,14 @@ add_custom_command(TARGET ox POST_BUILD
 )
 
 if(WIN32)
-    add_custom_command(TARGET ox POST_BUILD
+    add_custom_command(TARGET ox_runtime POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "  set XR_RUNTIME_JSON=${MANIFEST_OUTPUT}"
         COMMAND ${CMAKE_COMMAND} -E echo "====================================================================="
         COMMAND ${CMAKE_COMMAND} -E echo ""
         VERBATIM
     )
 else()
-    add_custom_command(TARGET ox POST_BUILD
+    add_custom_command(TARGET ox_runtime POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "  export XR_RUNTIME_JSON=\"${MANIFEST_OUTPUT}\""
         COMMAND ${CMAKE_COMMAND} -E echo "====================================================================="
         COMMAND ${CMAKE_COMMAND} -E echo ""
