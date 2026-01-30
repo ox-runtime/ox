@@ -51,8 +51,8 @@ Then run any OpenXR application.
 - Ensure the runtime library is in the same directory as the manifest
 
 **Build errors on Linux**
-- Make sure you have OpenGL development headers installed
-- Install: `sudo apt-get install libgl1-mesa-dev libx11-dev`
+- Make sure you have OpenGL and Vulkan development headers installed
+- Install: `sudo apt-get install libgl1-mesa-dev libx11-dev libvulkan-dev`
 
 ## References
 
