@@ -10,8 +10,14 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <linux/limits.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <linux/limits.h>
+#endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <sys/syslimits.h>
+#endif
 #endif
 
 #include "../logging.h"
@@ -133,12 +139,29 @@ class OxService {
         GetModuleFileNameA(NULL, path, MAX_PATH);
         exe_path = fs::path(path);
 #else
+#ifdef __APPLE__
+        char path[PATH_MAX];
+        uint32_t size = sizeof(path);
+        if (_NSGetExecutablePath(path, &size) == 0) {
+            char abs_path[PATH_MAX];
+            if (realpath(path, abs_path) != NULL) {
+                exe_path = fs::path(abs_path);
+            } else {
+                exe_path = fs::path(path);
+            }
+        } else {
+            LOG_ERROR("Failed to get executable path");
+        }
+#else
         char path[PATH_MAX];
         ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
         if (len != -1) {
             path[len] = '\0';
             exe_path = fs::path(path);
+        } else {
+            LOG_ERROR("Failed to get executable path");
         }
+#endif
 #endif
 
         fs::path drivers_dir = exe_path.parent_path() / "drivers";
