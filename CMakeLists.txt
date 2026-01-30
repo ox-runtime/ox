@@ -78,6 +78,11 @@ target_include_directories(ox PRIVATE
 find_package(OpenGL REQUIRED)
 target_link_libraries(ox PRIVATE OpenGL::GL)
 
+# Find Vulkan for graphics support
+find_package(Vulkan REQUIRED)
+target_link_libraries(ox PRIVATE Vulkan::Vulkan)
+target_include_directories(ox PRIVATE ${Vulkan_INCLUDE_DIRS})
+
 # Set output directory to build/bin (disable per-config subdirectories)
 set_target_properties(ox PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
