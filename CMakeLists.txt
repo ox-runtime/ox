@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(ox VERSION 1.0.0 LANGUAGES CXX)
+project(ox VERSION 0.4.0 LANGUAGES CXX)
 
 include(FetchContent)
 
@@ -56,6 +56,13 @@ target_include_directories(ox-service PRIVATE
 
 target_link_libraries(ox-service PRIVATE ${SERVICE_LIBS})
 
+# Define version macros for the service
+target_compile_definitions(ox-service PRIVATE
+    OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+)
+
 set_target_properties(ox-service PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
@@ -72,6 +79,13 @@ add_library(ox SHARED
 target_include_directories(ox PRIVATE
     ${OPENXR_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Define version macros for the runtime
+target_compile_definitions(ox PRIVATE
+    OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
 
 # Link OpenGL library for graphics support

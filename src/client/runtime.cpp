@@ -415,7 +415,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProperties(XrInstance instance, XrIn
 
     // Get runtime properties from cached metadata
     auto& props = g_service_connection->GetRuntimeProperties();
-    uint32_t version =
+    XrVersion version =
         XR_MAKE_VERSION(props.runtime_version_major, props.runtime_version_minor, props.runtime_version_patch);
     instanceProperties->runtimeVersion = version;
     safe_copy_string(instanceProperties->runtimeName, XR_MAX_RUNTIME_NAME_SIZE, props.runtime_name);

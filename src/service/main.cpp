@@ -23,6 +23,12 @@
 using namespace ox::protocol;
 namespace fs = std::filesystem;
 
+#ifndef OX_VERSION_MAJOR
+#define OX_VERSION_MAJOR 1
+#define OX_VERSION_MINOR 0
+#define OX_VERSION_PATCH 0
+#endif
+
 class OxService {
    public:
     OxService() : running_(false), frame_counter_(0), next_handle_(1) {}
@@ -173,9 +179,9 @@ class OxService {
     void InitializeRuntimeProperties() {
         std::strncpy(runtime_props_.runtime_name, "ox", sizeof(runtime_props_.runtime_name) - 1);
         runtime_props_.runtime_name[sizeof(runtime_props_.runtime_name) - 1] = '\0';
-        runtime_props_.runtime_version_major = 1;
-        runtime_props_.runtime_version_minor = 0;
-        runtime_props_.runtime_version_patch = 0;
+        runtime_props_.runtime_version_major = OX_VERSION_MAJOR;
+        runtime_props_.runtime_version_minor = OX_VERSION_MINOR;
+        runtime_props_.runtime_version_patch = OX_VERSION_PATCH;
         runtime_props_.padding = 0;
     }
 
