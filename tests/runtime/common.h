@@ -18,12 +18,6 @@ extern "C" void oxSetServiceConnection(ox::client::IServiceConnection* service);
 namespace ox {
 namespace test {
 
-/**
- * GMock mock for IServiceConnection
- *
- * This mock replaces the custom implementation to allow testing the OpenXR runtime logic
- * without requiring the actual ox-service to be running.
- */
 class MockServiceConnection : public client::IServiceConnection {
    public:
     MOCK_METHOD(bool, Connect, (), (override));
@@ -42,9 +36,8 @@ class MockServiceConnection : public client::IServiceConnection {
     MOCK_METHOD(bool, GetInputStateFloat, (const char*, const char*, int64_t, float&), (override));
     MOCK_METHOD(bool, GetInputStateVector2f, (const char*, const char*, int64_t, XrVector2f&), (override));
 
-    // Static method to set up default mock behaviors
     static void SetupDefaultBehaviors(MockServiceConnection* mock) {
-        // Set up default return values for methods that might be called
+        // Default connection behavior
         ON_CALL(*mock, Connect()).WillByDefault(testing::Return(true));
         ON_CALL(*mock, IsConnected()).WillByDefault(testing::Return(true));
         ON_CALL(*mock, GetSharedData()).WillByDefault(testing::Return(nullptr));
@@ -53,19 +46,20 @@ class MockServiceConnection : public client::IServiceConnection {
         ON_CALL(*mock, AllocateHandle(testing::_)).WillByDefault(testing::Return(1000));
         ON_CALL(*mock, GetNextEvent(testing::_)).WillByDefault(testing::Return(false));
 
-        // Set up default runtime properties
+        // Default runtime properties
         ON_CALL(*mock, GetRuntimeProperties()).WillByDefault(testing::ReturnRef(runtime_props_));
 
-        // Set up default system properties
+        // Default system properties
         ON_CALL(*mock, GetSystemProperties()).WillByDefault(testing::ReturnRef(system_props_));
 
-        // Set up default view configurations
+        // Default view configurations
+        ON_CALL(*mock, GetViewConfigurations()).WillByDefault(testing::ReturnRef(view_configs_));
         ON_CALL(*mock, GetViewConfigurations()).WillByDefault(testing::ReturnRef(view_configs_));
 
-        // Set up default interaction profiles
+        // Default interaction profiles
         ON_CALL(*mock, GetInteractionProfiles()).WillByDefault(testing::ReturnRef(interaction_profiles_));
 
-        // Set up default input state methods
+        // Default input state methods
         ON_CALL(*mock, GetInputStateBoolean(testing::_, testing::_, testing::_, testing::_))
             .WillByDefault(testing::DoAll(testing::SetArgReferee<3>(XR_FALSE), testing::Return(true)));
         ON_CALL(*mock, GetInputStateFloat(testing::_, testing::_, testing::_, testing::_))
@@ -83,7 +77,6 @@ class MockServiceConnection : public client::IServiceConnection {
     static ox::protocol::ControlChannel dummy_control_channel_;
 };
 
-// Static member definitions
 const ox::protocol::RuntimePropertiesResponse MockServiceConnection::runtime_props_ = []() {
     ox::protocol::RuntimePropertiesResponse props = {};
     strcpy(props.runtime_name, "ox Mock Runtime");
@@ -129,23 +122,19 @@ const ox::protocol::InteractionProfilesResponse MockServiceConnection::interacti
 
 ox::protocol::ControlChannel MockServiceConnection::dummy_control_channel_ = {};
 
-}  // namespace test
-}  // namespace ox
-
+// Base test fixture for runtime tests
 class RuntimeTestBase : public ::testing::Test {
    protected:
     void SetUp() override {
-        // Initialize and inject mock service connection
         mock_service = std::make_unique<ox::test::MockServiceConnection>();
 
-        // Set up default behaviors for the mock
         ox::test::MockServiceConnection::SetupDefaultBehaviors(mock_service.get());
 
         oxSetServiceConnection(mock_service.get());
     }
 
     void TearDown() override {
-        oxSetServiceConnection(nullptr);  // Reset to default
+        oxSetServiceConnection(nullptr);
         mock_service.reset();
     }
 
@@ -171,3 +160,6 @@ class RuntimeTestBase : public ::testing::Test {
     std::vector<XrInstance> created_instances_;
     std::unique_ptr<ox::test::MockServiceConnection> mock_service;
 };
+
+}  // namespace test
+}  // namespace ox
