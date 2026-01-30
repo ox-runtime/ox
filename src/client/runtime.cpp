@@ -18,6 +18,17 @@
 #include <vulkan/vulkan.h>
 #endif
 
+// Define graphics API usage macros based on enabled APIs
+#ifdef OX_OPENGL
+#define XR_USE_GRAPHICS_API_OPENGL
+#endif
+#ifdef OX_VULKAN
+#define XR_USE_GRAPHICS_API_VULKAN
+#endif
+#ifdef OX_METAL
+#define XR_USE_GRAPHICS_API_METAL
+#endif
+
 #include <openxr/openxr.h>
 #include <openxr/openxr_loader_negotiation.h>
 #include <openxr/openxr_platform.h>
