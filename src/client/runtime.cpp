@@ -26,6 +26,7 @@
 #define XR_USE_GRAPHICS_API_VULKAN
 #endif
 #ifdef OX_METAL
+#define XR_USE_GRAPHICS_API_METAL
 #define XR_KHR_metal_enable
 #endif
 
