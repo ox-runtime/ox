@@ -24,7 +24,23 @@ if(WIN32 AND MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+# Graphics API options with platform-specific defaults
+if(APPLE)
+    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
+    option(OX_VULKAN "Enable Vulkan graphics API support" OFF)
+    option(OX_METAL "Enable Metal graphics API support on macOS" ON)
+else()
+    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
+    option(OX_VULKAN "Enable Vulkan graphics API support" ON)
+    option(OX_METAL "Enable Metal graphics API support on macOS" OFF)
+endif()
+
 # Fetch OpenXR SDK
+# Configure OpenXR SDK to not look for Vulkan if OX_VULKAN is disabled
+if(NOT OX_VULKAN)
+    set(VULKAN_INCOMPATIBLE ON)
+endif()
+
 FetchContent_Declare(
     openxr
     GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
@@ -88,17 +104,6 @@ if(APPLE)
             COMPILE_FLAGS "-x objective-c++"
         )
     endif()
-endif()
-
-# Graphics API options with platform-specific defaults
-if(APPLE)
-    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
-    option(OX_VULKAN "Enable Vulkan graphics API support" OFF)
-    option(OX_METAL "Enable Metal graphics API support on macOS" ON)
-else()
-    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
-    option(OX_VULKAN "Enable Vulkan graphics API support" ON)
-    option(OX_METAL "Enable Metal graphics API support on macOS" OFF)
 endif()
 
 # Function to configure graphics APIs for a target
