@@ -63,10 +63,10 @@ jobs:
         rm -rf ox-runtime/tests
         if [ "$RUNNER_OS" == "Windows" ]; then
           ZIP_FILE_NAME="ox-runtime-win-x64.zip"
-          powershell -Command "Compress-Archive -Path ox-runtime -DestinationPath ../$ZIP_FILE_NAME"
+          powershell -Command "Compress-Archive -Path ox-runtime -DestinationPath $ZIP_FILE_NAME"
         else
           ZIP_FILE_NAME="ox-runtime-linux-x64.zip"
-          zip -r ../$ZIP_FILE_NAME ox-runtime
+          zip -r $ZIP_FILE_NAME ox-runtime
         fi
         echo "ZIP_FILE=$ZIP_FILE_NAME" >> $GITHUB_ENV
 
