@@ -36,11 +36,6 @@ else()
 endif()
 
 # Fetch OpenXR SDK
-# Configure OpenXR SDK to not look for Vulkan if OX_VULKAN is disabled
-if(NOT OX_VULKAN)
-    set(VULKAN_INCOMPATIBLE ON)
-endif()
-
 FetchContent_Declare(
     openxr
     GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
