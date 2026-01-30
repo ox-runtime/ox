@@ -4,6 +4,8 @@
 #define NOMINMAX  // Prevent Windows.h from defining min/max macros
 #include <unknwn.h>
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
 #else
 #include <GL/glx.h>
 #include <X11/Xlib.h>
@@ -14,6 +16,9 @@
 
 #define XR_USE_GRAPHICS_API_OPENGL
 #define XR_USE_GRAPHICS_API_VULKAN
+#ifdef __APPLE__
+#define XR_USE_GRAPHICS_API_METAL
+#endif
 #include <openxr/openxr.h>
 #include <openxr/openxr_loader_negotiation.h>
 #include <openxr/openxr_platform.h>
@@ -21,6 +26,8 @@
 // Include OpenGL for texture creation
 #ifdef _WIN32
 #include <GL/gl.h>
+#elif defined(__APPLE__)
+#include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
 #endif
@@ -35,6 +42,11 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <vector>
+
+#ifdef __APPLE__
+#include "metal_swapchain.h"
+#endif
 
 #include "../logging.h"
 #include "iservice_connection.h"
@@ -44,7 +56,7 @@ using namespace ox::client;
 using namespace ox::protocol;
 
 // Graphics API enumeration
-enum class GraphicsAPI { OpenGL, Vulkan };
+enum class GraphicsAPI { OpenGL, Vulkan, Metal };
 
 // Export macro for Windows DLL
 #ifdef _WIN32
@@ -72,6 +84,9 @@ struct SessionGraphicsBinding {
     VkDevice vkDevice = VK_NULL_HANDLE;
     VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
     VkInstance vkInstance = VK_NULL_HANDLE;
+#ifdef __APPLE__
+    void* metalDevice = nullptr;  // id<MTLDevice> (opaque pointer to avoid Objective-C in C++)
+#endif
     GraphicsAPI graphicsAPI = GraphicsAPI::OpenGL;
 };
 static std::unordered_map<XrSession, SessionGraphicsBinding> g_session_graphics;
@@ -81,8 +96,12 @@ struct SwapchainData {
     std::vector<uint32_t> glTextureIds;         // OpenGL texture IDs
     std::vector<VkImage> vkImages;              // Vulkan images
     std::vector<VkDeviceMemory> vkImageMemory;  // Vulkan image memory
-    VkDevice vkDevice;                          // Vulkan device
-    VkPhysicalDevice vkPhysicalDevice;          // Vulkan physical device
+#ifdef __APPLE__
+    std::vector<void*> metalTextures;  // Metal textures (id<MTLTexture> as opaque pointers)
+    void* metalDevice = nullptr;       // Metal device (id<MTLDevice> as opaque pointer)
+#endif
+    VkDevice vkDevice;                  // Vulkan device
+    VkPhysicalDevice vkPhysicalDevice;  // Vulkan physical device
     uint32_t width;
     uint32_t height;
     int64_t format;
@@ -315,8 +334,13 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInstanceExtensionProperties(const char
                                                                       uint32_t* propertyCountOutput,
                                                                       XrExtensionProperties* properties) {
     LOG_DEBUG("xrEnumerateInstanceExtensionProperties called");
+#ifdef __APPLE__
+    const char* extensions[] = {"XR_KHR_opengl_enable", "XR_KHR_vulkan_enable", "XR_KHR_vulkan_enable2",
+                                "XR_KHR_metal_enable", "XR_HTCX_vive_tracker_interaction"};
+#else
     const char* extensions[] = {"XR_KHR_opengl_enable", "XR_KHR_vulkan_enable", "XR_KHR_vulkan_enable2",
                                 "XR_HTCX_vive_tracker_interaction"};
+#endif
     const uint32_t extensionCount = sizeof(extensions) / sizeof(extensions[0]);
 
     if (propertyCountOutput) {
@@ -766,6 +790,18 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
                           .c_str());
             break;
         }
+#ifdef __APPLE__
+        if (header->type == XR_TYPE_GRAPHICS_BINDING_METAL_KHR) {
+            hasGraphicsBinding = true;
+            const XrGraphicsBindingMetalKHR* metalBinding = reinterpret_cast<const XrGraphicsBindingMetalKHR*>(header);
+            graphicsBinding.metalDevice = metalBinding->device;
+            graphicsBinding.graphicsAPI = GraphicsAPI::Metal;
+            LOG_DEBUG(("xrCreateSession: Metal graphics binding - device=" +
+                       std::to_string(reinterpret_cast<uintptr_t>(metalBinding->device)))
+                          .c_str());
+            break;
+        }
+#endif
         next = header->next;
     }
 
@@ -1409,8 +1445,10 @@ XRAPI_ATTR XrResult XRAPI_CALL xrStopHapticFeedback(XrSession session, const XrH
 XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, uint32_t formatCapacityInput,
                                                            uint32_t* formatCountOutput, int64_t* formats) {
     LOG_DEBUG("xrEnumerateSwapchainFormats called");
-    // Support both OpenGL and Vulkan formats
-    const int64_t supportedFormats[] = {
+
+    // Common formats supported on all platforms
+    std::vector<int64_t> supportedFormats = {
+        // OpenGL formats
         GL_RGBA,
         GL_RGBA8,
         // Vulkan formats (VkFormat enum values)
@@ -1419,7 +1457,13 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, ui
         VK_FORMAT_R8G8B8A8_UNORM,
     };
 
-    const uint32_t formatCount = sizeof(supportedFormats) / sizeof(supportedFormats[0]);
+#ifdef __APPLE__
+    // Add Metal formats on macOS
+    auto metalFormats = GetSupportedMetalFormats();
+    supportedFormats.insert(supportedFormats.end(), metalFormats.begin(), metalFormats.end());
+#endif
+
+    const uint32_t formatCount = static_cast<uint32_t>(supportedFormats.size());
 
     if (formatCountOutput) {
         *formatCountOutput = formatCount;
@@ -1442,6 +1486,17 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
+    // Add Metal-specific validations
+    if (createInfo->mipCount > 1) {
+        LOG_ERROR("Metal swapchains do not support mipmap chains (mipCount > 1)");
+        return XR_ERROR_FEATURE_UNSUPPORTED;
+    }
+
+    if (createInfo->arraySize > 1) {
+        LOG_ERROR("Metal swapchains do not support texture arrays (arraySize > 1)");
+        return XR_ERROR_FEATURE_UNSUPPORTED;
+    }
+
     uint64_t handle = g_service_connection->AllocateHandle(HandleType::SWAPCHAIN);
     if (handle == 0) {
         LOG_ERROR("Failed to allocate swapchain handle from service");
@@ -1458,12 +1513,21 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
     data.vkDevice = VK_NULL_HANDLE;          // Initialize Vulkan device
     data.vkPhysicalDevice = VK_NULL_HANDLE;  // Initialize Vulkan physical device
 
-    // For Vulkan sessions, store the device and physical device directly for consistency
+    // Determine graphics API from session and store relevant device handles
     auto graphicsIt = g_session_graphics.find(session);
-    if (graphicsIt != g_session_graphics.end() && graphicsIt->second.graphicsAPI == GraphicsAPI::Vulkan) {
-        data.vkDevice = graphicsIt->second.vkDevice;
-        data.vkPhysicalDevice = graphicsIt->second.vkPhysicalDevice;
-        data.graphicsAPI = GraphicsAPI::Vulkan;
+    if (graphicsIt != g_session_graphics.end()) {
+        data.graphicsAPI = graphicsIt->second.graphicsAPI;
+
+        if (data.graphicsAPI == GraphicsAPI::Vulkan) {
+            data.vkDevice = graphicsIt->second.vkDevice;
+            data.vkPhysicalDevice = graphicsIt->second.vkPhysicalDevice;
+        }
+#ifdef __APPLE__
+        else if (data.graphicsAPI == GraphicsAPI::Metal) {
+            data.metalDevice = graphicsIt->second.metalDevice;
+            LOG_DEBUG("Stored Metal device for swapchain");
+        }
+#endif
     }
 
     g_swapchains[*swapchain] = data;
@@ -1497,6 +1561,15 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
                 }
             }
         }
+
+#ifdef __APPLE__
+        // Destroy Metal textures if they were created
+        if (it->second.graphicsAPI == GraphicsAPI::Metal && !it->second.metalTextures.empty()) {
+            ReleaseMetalSwapchainTextures(it->second.metalTextures.data(),
+                                          static_cast<uint32_t>(it->second.metalTextures.size()));
+            it->second.metalTextures.clear();
+        }
+#endif
 
         g_swapchains.erase(it);
     }
@@ -1610,6 +1683,29 @@ static void CreateVulkanImages(SwapchainData& data, uint32_t numImages) {
     }
 }
 
+#ifdef __APPLE__
+// Helper function to create Metal textures using Objective-C++ implementation
+static void CreateMetalTextures(SwapchainData& data, uint32_t numImages) {
+    if (!data.metalDevice) {
+        LOG_ERROR("No Metal device available for swapchain texture creation");
+        data.metalTextures.resize(numImages, nullptr);
+        return;
+    }
+
+    // Allocate space for texture pointers
+    data.metalTextures.resize(numImages, nullptr);
+
+    // Create actual Metal textures using Objective-C++ implementation
+    bool success = CreateMetalSwapchainTextures(data.metalDevice, data.width, data.height, data.format, numImages,
+                                                data.metalTextures.data());
+
+    if (!success) {
+        LOG_ERROR("Failed to create Metal swapchain textures");
+        // The failed textures vector will be cleaned up later
+    }
+}
+#endif
+
 XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain, uint32_t imageCapacityInput,
                                                           uint32_t* imageCountOutput,
                                                           XrSwapchainImageBaseHeader* images) {
@@ -1639,6 +1735,11 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
     } else if (it->second.graphicsAPI == GraphicsAPI::Vulkan) {
         CreateVulkanImages(it->second, numImages);
     }
+#ifdef __APPLE__
+    else if (it->second.graphicsAPI == GraphicsAPI::Metal) {
+        CreateMetalTextures(it->second, numImages);
+    }
+#endif
 
     // Populate the image array
     for (uint32_t i = 0; i < imageCapacityInput && i < numImages; ++i) {
@@ -1653,8 +1754,17 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
             vkImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR;
             vkImages[i].next = nullptr;
             vkImages[i].image = (i < it->second.vkImages.size()) ? it->second.vkImages[i] : VK_NULL_HANDLE;
-        } else {
-            // For other graphics APIs (D3D, etc.), just set the base header
+        }
+#ifdef __APPLE__
+        else if (it->second.graphicsAPI == GraphicsAPI::Metal) {
+            XrSwapchainImageMetalKHR* metalImages = reinterpret_cast<XrSwapchainImageMetalKHR*>(images);
+            metalImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
+            metalImages[i].next = nullptr;
+            metalImages[i].texture = (i < it->second.metalTextures.size()) ? it->second.metalTextures[i] : nullptr;
+        }
+#endif
+        else {
+            // For other graphics APIs, just set the base header
             images[i].type = imageType;
             images[i].next = nullptr;
         }
@@ -1803,6 +1913,21 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsRequirements2KHR(
     // Same implementation as xrGetVulkanGraphicsRequirementsKHR
     return xrGetVulkanGraphicsRequirementsKHR(instance, systemId, graphicsRequirements);
 }
+
+#ifdef __APPLE__
+// Metal extension
+XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId,
+                                                                 XrGraphicsRequirementsMetalKHR* graphicsRequirements) {
+    LOG_DEBUG("xrGetMetalGraphicsRequirementsKHR called");
+    if (!graphicsRequirements) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    // Support Metal 1.0 and above
+    graphicsRequirements->minMetalVersion = XR_MAKE_VERSION(1, 0, 0);
+    graphicsRequirements->maxMetalVersion = XR_MAKE_VERSION(3, 0, 0);
+    return XR_SUCCESS;
+}
+#endif
 
 XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanInstanceExtensionsKHR(XrInstance instance, XrSystemId systemId,
                                                                 uint32_t bufferCapacityInput,
@@ -2069,6 +2194,10 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrCreateVulkanDeviceKHR"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateVulkanDeviceKHR);
     g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] =
         reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViveTrackerPathsHTCX);
+#ifdef __APPLE__
+    g_clientFunctionMap["xrGetMetalGraphicsRequirementsKHR"] =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetMetalGraphicsRequirementsKHR);
+#endif
 }
 
 // xrGetInstanceProcAddr

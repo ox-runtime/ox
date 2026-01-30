@@ -70,11 +70,25 @@ set_target_properties(ox-service PROPERTIES
 )
 
 # Client library (runtime DLL)
-add_library(ox_runtime SHARED
+set(OX_RUNTIME_SOURCES
     src/client/runtime.cpp
     src/client/service_connection.cpp
     src/logging.cpp
 )
+
+# Add Metal implementation for macOS
+if(APPLE)
+    option(OX_METAL "Enable Metal graphics API support on macOS" ON)
+    if(OX_METAL)
+        list(APPEND OX_RUNTIME_SOURCES src/client/metal_swapchain.mm)
+        # Enable Objective-C++ for .mm files
+        set_source_files_properties(src/client/metal_swapchain.mm PROPERTIES
+            COMPILE_FLAGS "-x objective-c++"
+        )
+    endif()
+endif()
+
+add_library(ox_runtime SHARED ${OX_RUNTIME_SOURCES})
 
 target_include_directories(ox_runtime PRIVATE
     ${OPENXR_INCLUDE_DIR}
@@ -96,6 +110,14 @@ target_link_libraries(ox_runtime PRIVATE OpenGL::GL)
 find_package(Vulkan REQUIRED)
 target_link_libraries(ox_runtime PRIVATE Vulkan::Vulkan)
 target_include_directories(ox_runtime PRIVATE ${Vulkan_INCLUDE_DIRS})
+
+# Add Metal framework for macOS
+if(APPLE AND OX_METAL)
+    find_library(METAL_LIBRARY Metal REQUIRED)
+    find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)
+    target_link_libraries(ox_runtime PRIVATE ${METAL_LIBRARY} ${QUARTZCORE_LIBRARY})
+    target_compile_definitions(ox_runtime PRIVATE OX_METAL=1)
+endif()
 
 # Set output directory to build/bin (disable per-config subdirectories)
 set_target_properties(ox_runtime PROPERTIES
@@ -122,6 +144,17 @@ if(WIN32)
     )
     set(RUNTIME_LIBRARY_NAME "ox_runtime.dll")
     set(RUNTIME_LIBRARY_PATH "./ox_runtime.dll")
+elseif(APPLE)
+    target_compile_definitions(ox_runtime PRIVATE
+        XR_USE_PLATFORM_MACOS
+    )
+    # For macOS, set the DYLIB versioning
+    set_target_properties(ox_runtime PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION 1
+    )
+    set(RUNTIME_LIBRARY_NAME "libox_runtime.dylib")
+    set(RUNTIME_LIBRARY_PATH "./libox_runtime.dylib")
 elseif(UNIX)
     target_compile_definitions(ox_runtime PRIVATE
         XR_USE_PLATFORM_XLIB
