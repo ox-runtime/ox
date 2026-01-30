@@ -38,6 +38,8 @@ message(STATUS "Using OpenXR SDK from FetchContent: ${openxr_SOURCE_DIR}")
 # Platform-specific link libraries
 if(WIN32)
     set(SERVICE_LIBS)
+elseif(APPLE)
+    set(SERVICE_LIBS pthread)
 else()
     set(SERVICE_LIBS pthread rt dl)
 endif()

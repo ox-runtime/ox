@@ -33,6 +33,8 @@ class DriverLoader {
         std::string lib_filename;
 #ifdef _WIN32
         lib_filename = "driver.dll";
+#elif defined(__APPLE__)
+        lib_filename = "libdriver.dylib";
 #else
         lib_filename = "libdriver.so";
 #endif
