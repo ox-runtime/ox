@@ -27,7 +27,12 @@
 #endif
 #ifdef OX_METAL
 #define XR_USE_GRAPHICS_API_METAL
-#define XR_KHR_metal_enable
+#define XR_KHR_metal_enable 1
+#endif
+
+// Silence OpenGL deprecation warnings on macOS
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
 #endif
 
 #include <openxr/openxr.h>
