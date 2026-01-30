@@ -4,7 +4,7 @@
 #import "metal_swapchain.h"
 #import <Metal/Metal.h>
 #import <Foundation/Foundation.h>
-#include "logger.h"
+#include "../logging.h"
 
 namespace ox {
 namespace client {
