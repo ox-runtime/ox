@@ -41,7 +41,7 @@ jobs:
         if [ "$RUNNER_OS" == "Windows" ]; then
           PLATFORM="win"
         fi
-        RELEASE_URL = "https://github.com/ox-runtime/ox-simulator/releases/latest/download"
+        RELEASE_URL="https://github.com/ox-runtime/ox-simulator/releases/latest/download"
         curl -L -o ox-simulator.zip "$RELEASE_URL/ox-simulator-driver-only-${PLATFORM}-x64.zip"
 
     - name: Unzip ox-simulator
