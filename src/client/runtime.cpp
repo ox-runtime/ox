@@ -2091,7 +2091,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetInstanceProcAddr(XrInstance instance, const 
         return XR_SUCCESS;
     }
 
-    LOG_ERROR(("xrGetInstanceProcAddr: Function NOT FOUND: " + std::string(name)).c_str());
+    LOG_DEBUG(("xrGetInstanceProcAddr: Function NOT FOUND: " + std::string(name)).c_str());
     *function = nullptr;
     return XR_ERROR_FUNCTION_UNSUPPORTED;
 }
