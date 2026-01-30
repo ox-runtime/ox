@@ -11,9 +11,14 @@
 
 #ifdef OX_METAL
 #define XR_USE_GRAPHICS_API_METAL
-#define XR_KHR_metal_enable
+#define XR_KHR_metal_enable 1
 #include <Metal/Metal.h>
 #include <openxr/openxr_platform.h>
+
+// Declare Metal extension functions
+extern "C" {
+XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsMetalKHR* graphicsRequirements);
+}
 #endif
 
 using namespace ox::test;
