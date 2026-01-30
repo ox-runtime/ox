@@ -108,9 +108,6 @@ bool CreateMetalSwapchainTextures(
         LOG_DEBUG(("Created Metal texture " + std::to_string(i) + 
                   " successfully").c_str());
     }
-        
-        LOG_DEBUG(("Created Metal texture " + std::to_string(i) + " successfully").c_str());
-    }
 
     LOG_INFO(("Successfully created " + std::to_string(numImages) + " Metal textures").c_str());
     return true;
