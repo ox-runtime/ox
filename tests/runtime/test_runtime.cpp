@@ -57,6 +57,8 @@ const ox::protocol::InteractionProfilesResponse ox::test::MockServiceConnection:
 
 ox::protocol::ControlChannel ox::test::MockServiceConnection::dummy_control_channel_ = {};
 
+ox::protocol::SharedData ox::test::MockServiceConnection::shared_data_ = {};
+
 // ============================================================================
 // Instance Tests
 // ============================================================================

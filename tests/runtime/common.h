@@ -37,11 +37,24 @@ class MockServiceConnection : public client::IServiceConnection {
     MOCK_METHOD(bool, GetInputStateVector2f, (const char*, const char*, int64_t, XrVector2f&), (override));
 
     static void SetupDefaultBehaviors(MockServiceConnection* mock) {
+        // Initialize shared data
+        shared_data_.fields.protocol_version.store(ox::protocol::PROTOCOL_VERSION);
+        shared_data_.fields.service_ready.store(1);
+        shared_data_.fields.client_connected.store(1);
+        shared_data_.fields.session_state.store(static_cast<uint32_t>(ox::protocol::SessionState::READY));
+        shared_data_.fields.active_session_handle.store(1000);
+
         // Default connection behavior
         ON_CALL(*mock, Connect()).WillByDefault(testing::Return(true));
         ON_CALL(*mock, IsConnected()).WillByDefault(testing::Return(true));
-        ON_CALL(*mock, GetSharedData()).WillByDefault(testing::Return(nullptr));
+        ON_CALL(*mock, GetSharedData()).WillByDefault(testing::Return(&shared_data_));
         ON_CALL(*mock, GetControlChannel()).WillByDefault(testing::ReturnRef(dummy_control_channel_));
+        ON_CALL(*mock, SendRequest(ox::protocol::MessageType::CREATE_SESSION, testing::_, testing::_))
+            .WillByDefault(testing::DoAll(testing::Invoke([](ox::protocol::MessageType, const void*, uint32_t) {
+                                              // Simulate service setting the session handle
+                                              shared_data_.fields.active_session_handle.store(1000);
+                                          }),
+                                          testing::Return(true)));
         ON_CALL(*mock, SendRequest(testing::_, testing::_, testing::_)).WillByDefault(testing::Return(true));
         ON_CALL(*mock, AllocateHandle(testing::_)).WillByDefault(testing::Return(1000));
         ON_CALL(*mock, GetNextEvent(testing::_)).WillByDefault(testing::Return(false));
@@ -75,6 +88,7 @@ class MockServiceConnection : public client::IServiceConnection {
     static const ox::protocol::ViewConfigurationsResponse view_configs_;
     static const ox::protocol::InteractionProfilesResponse interaction_profiles_;
     static ox::protocol::ControlChannel dummy_control_channel_;
+    static ox::protocol::SharedData shared_data_;
 };
 
 // Base test fixture for runtime tests
