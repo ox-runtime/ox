@@ -24,3 +24,55 @@ jobs:
       run: |
         cd build/bin/tests/runtime
         ./runtime_tests
+
+    - name: Download ox-example-driver
+      shell: bash
+      run: |
+        PLATFORM="linux-x64"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          PLATFORM="win-x64"
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          PLATFORM="mac-arm64"
+        fi
+        RELEASE_URL="https://github.com/ox-runtime/ox-example-driver/releases/latest/download"
+        curl -L -o ox-example-driver.zip "$RELEASE_URL/ox-example-driver-${PLATFORM}.zip"
+
+    - name: Unzip ox-example-driver
+      shell: bash
+      run: |
+        mkdir -p build/bin/drivers
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          powershell -Command "Expand-Archive -Path ox-example-driver.zip -DestinationPath build/bin/drivers/"
+        else
+          unzip ox-example-driver.zip -d build/bin/drivers/
+        fi
+
+    - name: Start ox-service
+      run: |
+        ./build/bin/ox-service &
+      shell: bash
+
+    - name: Setup Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Download and unzip pyopenxr_examples
+      run: |
+        curl -L -o pyopenxr_examples.zip https://github.com/ox-runtime/pyopenxr_examples/archive/refs/heads/main.zip
+        unzip pyopenxr_examples.zip
+
+    - name: Create venv and install pyopenxr
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install pyopenxr
+
+    - name: Run examples
+      run: |
+        source venv/bin/activate
+        export XR_RUNTIME_JSON=./build/bin/ox_openxr.json
+        python pyopenxr_examples-main/xr_examples/track_hmd2.py
+        python pyopenxr_examples-main/xr_examples/track_controller.py
+        python pyopenxr_examples-main/xr_examples/track_buttons.py
