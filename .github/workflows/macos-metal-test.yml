@@ -28,24 +28,14 @@ jobs:
     - name: Download ox-example-driver
       shell: bash
       run: |
-        PLATFORM="linux-x64"
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          PLATFORM="win-x64"
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          PLATFORM="mac-arm64"
-        fi
-        RELEASE_URL="https://github.com/ox-runtime/ox-example-driver/releases/latest/download"
-        curl -L -o ox-example-driver.zip "$RELEASE_URL/ox-example-driver-${PLATFORM}.zip"
+        RELEASE_URL="https://github.com/ox-runtime/ox-driver-example/releases/latest/download"
+        curl -L -o ox-example-driver.zip "$RELEASE_URL/ox-example-driver-mac-arm64.zip"
 
     - name: Unzip ox-example-driver
       shell: bash
       run: |
         mkdir -p build/bin/drivers
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          powershell -Command "Expand-Archive -Path ox-example-driver.zip -DestinationPath build/bin/drivers/"
-        else
-          unzip ox-example-driver.zip -d build/bin/drivers/
-        fi
+        unzip ox-example-driver.zip -d build/bin/drivers/
 
     - name: Start ox-service
       run: |
