@@ -36,6 +36,7 @@ jobs:
         cmake --build build --config Release
 
     - name: Run runtime tests
+      shell: bash
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
           ./build/bin/tests/runtime/runtime_tests.exe
