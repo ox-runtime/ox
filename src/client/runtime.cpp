@@ -2011,6 +2011,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsRequirements2KHR(
 
 #ifdef OX_METAL
 // Metal extension
+extern "C" {
 XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId,
                                                                  XrGraphicsRequirementsMetalKHR* graphicsRequirements) {
     LOG_DEBUG("xrGetMetalGraphicsRequirementsKHR called");
@@ -2021,6 +2022,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance inst
     graphicsRequirements->next = nullptr;
     graphicsRequirements->metalDevice = GetMetalDefaultDevice();
     return XR_SUCCESS;
+}
 }
 #endif
 
