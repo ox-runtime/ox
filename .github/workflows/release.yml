@@ -11,7 +11,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
     - name: Checkout ox
       uses: actions/checkout@v4
@@ -38,21 +38,23 @@ jobs:
     - name: Download ox-simulator
       shell: bash
       run: |
-        PLATFORM="linux"
+        PLATFORM="linux-x64"
         if [ "$RUNNER_OS" == "Windows" ]; then
-          PLATFORM="win"
+          PLATFORM="win-x64"
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          PLATFORM="mac-arm64"
         fi
         RELEASE_URL="https://github.com/ox-runtime/ox-simulator/releases/latest/download"
-        curl -L -o ox-simulator.zip "$RELEASE_URL/ox-simulator-driver-only-${PLATFORM}-x64.zip"
+        curl -L -o ox-simulator.zip "$RELEASE_URL/ox-simulator-driver-only-${PLATFORM}.zip"
 
     - name: Unzip ox-simulator
       shell: bash
       run: |
         mkdir -p build/bin/drivers
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          unzip ox-simulator.zip -d build/bin/drivers/
-        else
+        if [ "$RUNNER_OS" == "Windows" ]; then
           powershell -Command "Expand-Archive -Path ox-simulator.zip -DestinationPath build/bin/drivers/"
+        else
+          unzip ox-simulator.zip -d build/bin/drivers/
         fi
 
     - name: Create zip
@@ -64,6 +66,9 @@ jobs:
         if [ "$RUNNER_OS" == "Windows" ]; then
           ZIP_FILE_NAME="ox-runtime-win-x64.zip"
           powershell -Command "Compress-Archive -Path ox-runtime -DestinationPath $ZIP_FILE_NAME"
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          ZIP_FILE_NAME="ox-runtime-mac-arm64.zip"
+          zip -r $ZIP_FILE_NAME ox-runtime
         else
           ZIP_FILE_NAME="ox-runtime-linux-x64.zip"
           zip -r $ZIP_FILE_NAME ox-runtime
