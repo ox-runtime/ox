@@ -32,11 +32,11 @@ class DriverLoader {
         // Look for standardized driver library name
         std::string lib_filename;
 #ifdef _WIN32
-        lib_filename = "driver.dll";
+        lib_filename = "ox_driver.dll";
 #elif defined(__APPLE__)
-        lib_filename = "libdriver.dylib";
+        lib_filename = "libox_driver.dylib";
 #else
-        lib_filename = "libdriver.so";
+        lib_filename = "libox_driver.so";
 #endif
 
         std::string lib_path = driver_path;
