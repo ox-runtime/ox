@@ -35,6 +35,14 @@ jobs:
         cmake -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
 
+    - name: Run runtime tests
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ./build/bin/tests/runtime/runtime_tests.exe
+        else
+          ./build/bin/tests/runtime/runtime_tests
+        fi
+
     - name: Download ox-simulator
       shell: bash
       run: |
