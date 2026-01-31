@@ -1,10 +1,16 @@
-add_executable(runtime_tests
+set(RUNTIME_TEST_SOURCES
     test_runtime.cpp
-    test_metal.mm
     ../../src/client/runtime.cpp
     ../../src/logging.cpp
     common.h
 )
+
+# Add Metal test for macOS
+if(APPLE AND OX_METAL)
+    list(APPEND RUNTIME_TEST_SOURCES test_metal.mm)
+endif()
+
+add_executable(runtime_tests ${RUNTIME_TEST_SOURCES})
 
 # Add Metal implementation for macOS
 if(APPLE AND OX_METAL)
