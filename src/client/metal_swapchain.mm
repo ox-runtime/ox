@@ -1,6 +1,8 @@
 #ifdef __APPLE__
 #ifdef __OBJC__
 
+#include <string>
+
 #import "metal_swapchain.h"
 #import <Metal/Metal.h>
 #import <Foundation/Foundation.h>
