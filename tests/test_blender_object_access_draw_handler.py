@@ -8,6 +8,13 @@ from mathutils import Vector
 def test_object_access_in_xr():
     def draw_callback():
         bpy.data.objects["Light"].location = Vector((1, 1, 1))
+        new_loc = bpy.data.objects["Light"].location
+        print(f"Light location in draw handler: {new_loc}")
+        assert (
+            abs(new_loc.x - 1) < 0.01 and abs(new_loc.y - 1) < 0.01 and abs(new_loc.z - 1) < 0.01
+        ), "Light location was not updated correctly in draw handler"
+        print("Test passed: Light location updated correctly in draw handler")
+        exit(0)
 
     handler = bpy.types.SpaceView3D.draw_handler_add(draw_callback, (), "XR", "POST_VIEW")
 
