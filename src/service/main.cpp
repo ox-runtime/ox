@@ -57,9 +57,9 @@ class OxService {
         shared_data_ = static_cast<SharedData*>(shared_mem_.GetPointer());
 
         // Initialize protocol metadata
-        shared_data_->fields.protocol_version.store(PROTOCOL_VERSION, std::memory_order_release);
-        shared_data_->fields.service_ready.store(1, std::memory_order_release);
-        shared_data_->fields.client_connected.store(0, std::memory_order_release);
+        shared_data_->protocol_version.store(PROTOCOL_VERSION, std::memory_order_release);
+        shared_data_->service_ready.store(1, std::memory_order_release);
+        shared_data_->client_connected.store(0, std::memory_order_release);
 
         // Initialize static properties (stored in service, not shared memory)
         InitializeRuntimeProperties();
@@ -67,8 +67,8 @@ class OxService {
         InitializeViewConfigurations();
 
         // Initialize session state (dynamic)
-        shared_data_->fields.session_state.store(static_cast<uint32_t>(SessionState::IDLE), std::memory_order_release);
-        shared_data_->fields.active_session_handle.store(0, std::memory_order_release);
+        shared_data_->session_state.store(static_cast<uint32_t>(SessionState::IDLE), std::memory_order_release);
+        shared_data_->active_session_handle.store(0, std::memory_order_release);
 
         // Create control channel
         if (!control_.CreateServer("ox_runtime_control")) {
@@ -97,13 +97,13 @@ class OxService {
             }
 
             LOG_INFO("ox-service: Client connected");
-            shared_data_->fields.client_connected.store(1, std::memory_order_release);
+            shared_data_->client_connected.store(1, std::memory_order_release);
 
             // Handle control messages for this client
             MessageLoop();
 
             // Client disconnected, clean up and wait for next client
-            shared_data_->fields.client_connected.store(0, std::memory_order_release);
+            shared_data_->client_connected.store(0, std::memory_order_release);
             control_.Close();
 
             // Recreate control channel for next client
@@ -257,15 +257,14 @@ class OxService {
     }
 
     void TransitionSessionState(SessionState new_state) {
-        SessionState old_state =
-            static_cast<SessionState>(shared_data_->fields.session_state.load(std::memory_order_acquire));
+        SessionState old_state = static_cast<SessionState>(shared_data_->session_state.load(std::memory_order_acquire));
 
         if (old_state != new_state) {
-            shared_data_->fields.session_state.store(static_cast<uint32_t>(new_state), std::memory_order_release);
+            shared_data_->session_state.store(static_cast<uint32_t>(new_state), std::memory_order_release);
 
             // Queue state change event
             SessionStateEvent event;
-            event.session_handle = shared_data_->fields.active_session_handle.load(std::memory_order_acquire);
+            event.session_handle = shared_data_->active_session_handle.load(std::memory_order_acquire);
             event.state = new_state;
 
             auto now = std::chrono::steady_clock::now();
@@ -354,7 +353,7 @@ class OxService {
     void HandleCreateSession(const MessageHeader& request) {
         // Allocate session handle
         uint64_t session_handle = AllocateHandle(HandleType::SESSION);
-        shared_data_->fields.active_session_handle.store(session_handle, std::memory_order_release);
+        shared_data_->active_session_handle.store(session_handle, std::memory_order_release);
 
         // Transition to READY state
         TransitionSessionState(SessionState::READY);
@@ -382,10 +381,10 @@ class OxService {
     }
 
     void HandleDestroySession(const MessageHeader& request) {
-        uint64_t session_handle = shared_data_->fields.active_session_handle.load(std::memory_order_acquire);
+        uint64_t session_handle = shared_data_->active_session_handle.load(std::memory_order_acquire);
         if (session_handle != 0) {
             FreeHandle(session_handle);
-            shared_data_->fields.active_session_handle.store(0, std::memory_order_release);
+            shared_data_->active_session_handle.store(0, std::memory_order_release);
         }
 
         TransitionSessionState(SessionState::IDLE);
@@ -405,7 +404,7 @@ class OxService {
         }
 
         const RequestExitSessionRequest* req = reinterpret_cast<const RequestExitSessionRequest*>(payload.data());
-        uint64_t session_handle = shared_data_->fields.active_session_handle.load(std::memory_order_acquire);
+        uint64_t session_handle = shared_data_->active_session_handle.load(std::memory_order_acquire);
 
         if (req->session_handle != session_handle) {
             LOG_ERROR("RequestExitSession for invalid session handle");
@@ -606,7 +605,7 @@ class OxService {
     }
 
     void UpdatePoseData() {
-        auto& frame = shared_data_->fields.frame_state;
+        auto& frame = shared_data_->frame_state;
 
         // Update frame counter
         uint64_t frame_id = frame_counter_++;
@@ -683,6 +682,24 @@ class OxService {
             }
         } else {
             frame.device_count.store(0, std::memory_order_release);
+        }
+
+        // Submit frame textures to driver if available
+        if (driver_.HasSubmitFramePixels()) {
+            for (uint32_t eye_idx = 0; eye_idx < 2; eye_idx++) {
+                auto& texture = frame.textures[eye_idx];
+
+                // Check if texture is ready
+                if (texture.ready.load(std::memory_order_acquire) == 1) {
+                    uint32_t width = texture.width.load(std::memory_order_relaxed);
+                    uint32_t height = texture.height.load(std::memory_order_relaxed);
+                    uint32_t format = texture.format.load(std::memory_order_relaxed);
+                    uint32_t data_size = texture.data_size.load(std::memory_order_relaxed);
+
+                    // Submit to driver (driver can read directly from shared memory - zero copy!)
+                    driver_.SubmitFramePixels(eye_idx, width, height, format, texture.pixel_data, data_size);
+                }
+            }
         }
     }
 

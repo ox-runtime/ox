@@ -113,6 +113,8 @@ struct SessionGraphicsBinding {
     VkDevice vkDevice = VK_NULL_HANDLE;
     VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
     VkInstance vkInstance = VK_NULL_HANDLE;
+    uint32_t queueFamilyIndex = 0;
+    uint32_t queueIndex = 0;
 #endif
 #ifdef OX_METAL
     void* metalCommandQueue = nullptr;  // id<MTLCommandQueue> (opaque pointer)
@@ -127,8 +129,10 @@ struct SwapchainData {
 #ifdef OX_VULKAN
     std::vector<VkImage> vkImages;              // Vulkan images
     std::vector<VkDeviceMemory> vkImageMemory;  // Vulkan image memory
-    VkDevice vkDevice;                          // Vulkan device
-    VkPhysicalDevice vkPhysicalDevice;          // Vulkan physical device
+    VkDevice vkDevice = VK_NULL_HANDLE;
+    VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
+    VkQueue vkQueue = VK_NULL_HANDLE;
+    VkCommandPool vkCommandPool = VK_NULL_HANDLE;
 #endif
 #ifdef OX_METAL
     std::vector<void*> metalTextures;   // Metal textures (id<MTLTexture> as opaque pointers)
@@ -199,10 +203,10 @@ inline void BuildDeviceMap() {
     }
 
     g_device_path_to_index.clear();
-    uint32_t device_count = shared_data->fields.frame_state.device_count.load(std::memory_order_acquire);
+    uint32_t device_count = shared_data->frame_state.device_count.load(std::memory_order_acquire);
 
     for (uint32_t i = 0; i < device_count && i < MAX_TRACKED_DEVICES; i++) {
-        std::string user_path(shared_data->fields.frame_state.device_poses[i].user_path);
+        std::string user_path(shared_data->frame_state.device_poses[i].user_path);
         if (!user_path.empty()) {
             g_device_path_to_index[user_path] = i;
         }
@@ -827,11 +831,10 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
             graphicsBinding.vkInstance = vkBinding->instance;
             graphicsBinding.vkPhysicalDevice = vkBinding->physicalDevice;
             graphicsBinding.vkDevice = vkBinding->device;
+            graphicsBinding.queueFamilyIndex = vkBinding->queueFamilyIndex;
+            graphicsBinding.queueIndex = vkBinding->queueIndex;
             graphicsBinding.graphicsAPI = GraphicsAPI::Vulkan;
-            LOG_DEBUG(("xrCreateSession: Vulkan graphics binding - instance=" +
-                       std::to_string(reinterpret_cast<uintptr_t>(vkBinding->instance)) +
-                       ", device=" + std::to_string(reinterpret_cast<uintptr_t>(vkBinding->device)))
-                          .c_str());
+            LOG_DEBUG(("xrCreateSession: Vulkan graphics binding detected").c_str());
             break;
         }
 #endif
@@ -867,7 +870,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
 
     // Wait briefly for service to set the session handle
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    uint64_t handle = shared_data->fields.active_session_handle.load(std::memory_order_acquire);
+    uint64_t handle = shared_data->active_session_handle.load(std::memory_order_acquire);
 
     if (handle == 0) {
         LOG_ERROR("xrCreateSession: Service did not create session");
@@ -1008,7 +1011,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
 
         if (device_index >= 0 && device_index < MAX_TRACKED_DEVICES) {
             // Read device pose from shared memory
-            auto& device_data = shared_data->fields.frame_state.device_poses[device_index];
+            auto& device_data = shared_data->frame_state.device_poses[device_index];
 
             if (device_data.is_active) {
                 location->locationFlags =
@@ -1088,7 +1091,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitI
     auto* shared_data = g_service_connection->GetSharedData();
     if (shared_data) {
         frameState->predictedDisplayTime =
-            shared_data->fields.frame_state.predicted_display_time.load(std::memory_order_acquire);
+            shared_data->frame_state.predicted_display_time.load(std::memory_order_acquire);
         frameState->predictedDisplayPeriod = 11111111;  // ~90 FPS
     } else {
         frameState->predictedDisplayTime = 0;
@@ -1098,6 +1101,200 @@ XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitI
     frameState->shouldRender = XR_TRUE;
     return XR_SUCCESS;
 }
+
+// Helper functions to copy texture pixels to CPU memory
+#ifdef OX_OPENGL
+static bool CopyGLTextureToMemory(uint32_t textureId, uint32_t width, uint32_t height, std::byte* dest,
+                                  size_t destSize) {
+    // Verify we have enough space (RGBA8)
+    size_t requiredSize = width * height * 4;
+    if (destSize < requiredSize) {
+        LOG_ERROR("Destination buffer too small for texture data");
+        return false;
+    }
+
+    // Clear any previous errors
+    while (glGetError() != GL_NO_ERROR);
+
+    // Bind the texture and read pixels directly as RGBA
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    GLenum bindError = glGetError();
+    if (bindError != GL_NO_ERROR) {
+        LOG_ERROR(
+            ("OpenGL error binding texture " + std::to_string(textureId) + ": " + std::to_string(bindError)).c_str());
+        return false;
+    }
+
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, dest);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Check for GL errors
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        LOG_ERROR(("OpenGL error reading texture " + std::to_string(textureId) + ": " + std::to_string(error)).c_str());
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+#ifdef OX_VULKAN
+static bool CopyVulkanTextureToMemory(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue,
+                                      VkCommandPool commandPool, VkImage image, uint32_t width, uint32_t height,
+                                      VkFormat format, std::byte* dest, size_t destSize) {
+    size_t requiredSize = width * height * 4;
+    if (destSize < requiredSize) {
+        LOG_ERROR("Destination buffer too small for texture data");
+        return false;
+    }
+
+    // Create staging buffer
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = requiredSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkBuffer stagingBuffer;
+    if (vkCreateBuffer(device, &bufferInfo, nullptr, &stagingBuffer) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create Vulkan staging buffer");
+        return false;
+    }
+
+    // Allocate host-visible memory
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, stagingBuffer, &memRequirements);
+
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    uint32_t memoryTypeIndex = UINT32_MAX;
+    VkMemoryPropertyFlags requiredProps = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((memRequirements.memoryTypeBits & (1 << i)) &&
+            (memProperties.memoryTypes[i].propertyFlags & requiredProps) == requiredProps) {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    if (memoryTypeIndex == UINT32_MAX) {
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        LOG_ERROR("Failed to find suitable Vulkan memory type");
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = memoryTypeIndex;
+
+    VkDeviceMemory stagingMemory;
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &stagingMemory) != VK_SUCCESS) {
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        LOG_ERROR("Failed to allocate Vulkan staging memory");
+        return false;
+    }
+
+    vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0);
+
+    // Create command buffer for copy operation
+    VkCommandBufferAllocateInfo cmdAllocInfo = {};
+    cmdAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdAllocInfo.commandPool = commandPool;
+    cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdAllocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmdBuffer;
+    if (vkAllocateCommandBuffers(device, &cmdAllocInfo, &cmdBuffer) != VK_SUCCESS) {
+        vkFreeMemory(device, stagingMemory, nullptr);
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        LOG_ERROR("Failed to allocate Vulkan command buffer");
+        return false;
+    }
+
+    // Begin command buffer
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(cmdBuffer, &beginInfo);
+
+    // Transition image to TRANSFER_SRC_OPTIMAL
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                         nullptr, 0, nullptr, 1, &barrier);
+
+    // Copy image to buffer
+    VkBufferImageCopy region = {};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {0, 0, 0};
+    region.imageExtent = {width, height, 1};
+
+    vkCmdCopyImageToBuffer(cmdBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
+
+    // Transition back to COLOR_ATTACHMENT_OPTIMAL
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0,
+                         nullptr, 0, nullptr, 1, &barrier);
+
+    vkEndCommandBuffer(cmdBuffer);
+
+    // Submit and wait
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cmdBuffer;
+
+    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(queue);
+
+    // Copy data from staging buffer to destination
+    void* data;
+    if (vkMapMemory(device, stagingMemory, 0, requiredSize, 0, &data) == VK_SUCCESS) {
+        std::memcpy(dest, data, requiredSize);
+        vkUnmapMemory(device, stagingMemory);
+    }
+
+    // Cleanup
+    vkFreeCommandBuffers(device, commandPool, 1, &cmdBuffer);
+    vkFreeMemory(device, stagingMemory, nullptr);
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+
+    return true;
+}
+#endif
+
+#ifdef OX_METAL
+// Forward declaration from metal_swapchain.h
+extern "C" bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, void* dest, size_t destSize);
+#endif
 
 XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const XrFrameBeginInfo* frameBeginInfo) {
     LOG_DEBUG("xrBeginFrame called");
@@ -1110,10 +1307,102 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInf
         return XR_ERROR_VALIDATION_FAILURE;
     }
 
-    // We're not rendering anything to the device yet, but we need to safely
-    // handle the layer information to prevent crashes
+    // Get shared memory for texture upload
+    auto* shared_data = g_service_connection->GetSharedData();
+    if (!shared_data) {
+        LOG_ERROR("Shared memory not available");
+        return XR_ERROR_RUNTIME_FAILURE;
+    }
+
+    // Process submitted layers
     if (frameEndInfo->layerCount > 0 && frameEndInfo->layers) {
-        LOG_DEBUG("xrEndFrame: Received layers (ignoring for now)");
+        LOG_DEBUG("xrEndFrame: Processing submitted layers");
+
+        // We only handle projection layers for now
+        for (uint32_t layerIdx = 0; layerIdx < frameEndInfo->layerCount; layerIdx++) {
+            const XrCompositionLayerBaseHeader* layer = frameEndInfo->layers[layerIdx];
+            if (!layer) continue;
+
+            if (layer->type == XR_TYPE_COMPOSITION_LAYER_PROJECTION) {
+                const XrCompositionLayerProjection* projLayer =
+                    reinterpret_cast<const XrCompositionLayerProjection*>(layer);
+
+                // Process each view (eye)
+                for (uint32_t viewIdx = 0; viewIdx < projLayer->viewCount && viewIdx < 2; viewIdx++) {
+                    const XrCompositionLayerProjectionView& view = projLayer->views[viewIdx];
+                    XrSwapchain swapchain = view.subImage.swapchain;
+
+                    // Look up swapchain data
+                    std::lock_guard<std::mutex> lock(g_instance_mutex);
+                    auto swapchainIt = g_swapchains.find(swapchain);
+                    if (swapchainIt == g_swapchains.end()) {
+                        LOG_ERROR("Invalid swapchain in submitted layer");
+                        continue;
+                    }
+
+                    const SwapchainData& swapchainData = swapchainIt->second;
+                    auto& frameTexture = shared_data->frame_state.textures[viewIdx];
+
+                    // Mark texture as not ready while we're updating
+                    frameTexture.ready.store(0, std::memory_order_release);
+
+                    // Set texture metadata
+                    frameTexture.width.store(swapchainData.width, std::memory_order_relaxed);
+                    frameTexture.height.store(swapchainData.height, std::memory_order_relaxed);
+                    frameTexture.format.store(static_cast<uint32_t>(swapchainData.format), std::memory_order_relaxed);
+
+                    // Get the current swapchain image index (we use 0 for now, real impl tracks acquired index)
+                    uint32_t imageIdx = 0;
+                    size_t destSize = sizeof(frameTexture.pixel_data);
+                    bool copySuccess = false;
+
+                    // Copy texture pixels based on graphics API
+                    switch (swapchainData.graphicsAPI) {
+#ifdef OX_OPENGL
+                        case GraphicsAPI::OpenGL:
+                            if (imageIdx < swapchainData.glTextureIds.size()) {
+                                copySuccess =
+                                    CopyGLTextureToMemory(swapchainData.glTextureIds[imageIdx], swapchainData.width,
+                                                          swapchainData.height, frameTexture.pixel_data, destSize);
+                            }
+                            break;
+#endif
+#ifdef OX_VULKAN
+                        case GraphicsAPI::Vulkan:
+                            if (imageIdx < swapchainData.vkImages.size()) {
+                                copySuccess = CopyVulkanTextureToMemory(
+                                    swapchainData.vkDevice, swapchainData.vkPhysicalDevice, swapchainData.vkQueue,
+                                    swapchainData.vkCommandPool, swapchainData.vkImages[imageIdx], swapchainData.width,
+                                    swapchainData.height, static_cast<VkFormat>(swapchainData.format),
+                                    frameTexture.pixel_data, destSize);
+                            }
+                            break;
+#endif
+#ifdef OX_METAL
+                        case GraphicsAPI::Metal:
+                            if (imageIdx < swapchainData.metalTextures.size()) {
+                                copySuccess =
+                                    CopyMetalTextureToMemory(swapchainData.metalTextures[imageIdx], swapchainData.width,
+                                                             swapchainData.height, frameTexture.pixel_data, destSize);
+                            }
+                            break;
+#endif
+                        default:
+                            LOG_ERROR("Unsupported graphics API for texture copy");
+                            break;
+                    }
+
+                    if (copySuccess) {
+                        frameTexture.data_size.store(swapchainData.width * swapchainData.height * 4,
+                                                     std::memory_order_relaxed);
+                        frameTexture.ready.store(1, std::memory_order_release);
+                        LOG_DEBUG(("Copied texture for eye " + std::to_string(viewIdx)).c_str());
+                    } else {
+                        LOG_ERROR(("Failed to copy texture for eye " + std::to_string(viewIdx)).c_str());
+                    }
+                }
+            }
+        }
     }
 
     return XR_SUCCESS;
@@ -1138,13 +1427,13 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateViews(XrSession session, const XrViewLoca
     // Read pose data from shared memory
     auto* shared_data = g_service_connection->GetSharedData();
     if (views && viewCapacityInput >= 2 && shared_data) {
-        uint32_t view_count = shared_data->fields.frame_state.view_count.load(std::memory_order_acquire);
+        uint32_t view_count = shared_data->frame_state.view_count.load(std::memory_order_acquire);
 
         for (uint32_t i = 0; i < 2 && i < viewCapacityInput; i++) {
             views[i].type = XR_TYPE_VIEW;
             views[i].next = nullptr;
 
-            auto& view_data = shared_data->fields.frame_state.views[i];
+            auto& view_data = shared_data->frame_state.views[i];
 
             views[i].pose = view_data.pose.pose;
 
@@ -1574,10 +1863,25 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
                 break;
 #endif
 #ifdef OX_VULKAN
-            case GraphicsAPI::Vulkan:
+            case GraphicsAPI::Vulkan: {
                 data.vkDevice = graphicsIt->second.vkDevice;
                 data.vkPhysicalDevice = graphicsIt->second.vkPhysicalDevice;
+
+                // Get the queue
+                vkGetDeviceQueue(data.vkDevice, graphicsIt->second.queueFamilyIndex, graphicsIt->second.queueIndex,
+                                 &data.vkQueue);
+
+                // Create command pool
+                VkCommandPoolCreateInfo poolInfo = {};
+                poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+                poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+                poolInfo.queueFamilyIndex = graphicsIt->second.queueFamilyIndex;
+
+                if (vkCreateCommandPool(data.vkDevice, &poolInfo, nullptr, &data.vkCommandPool) != VK_SUCCESS) {
+                    LOG_ERROR("Failed to create Vulkan command pool for swapchain");
+                }
                 break;
+            }
 #endif
 #ifdef OX_METAL
             case GraphicsAPI::Metal:
@@ -1613,9 +1917,15 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
 
         // Destroy Vulkan images if they were created
 #ifdef OX_VULKAN
-        if (it->second.graphicsAPI == GraphicsAPI::Vulkan && !it->second.vkImages.empty()) {
-            VkDevice device = it->second.vkDevice;  // Use stored device directly
+        if (it->second.graphicsAPI == GraphicsAPI::Vulkan) {
+            VkDevice device = it->second.vkDevice;
             if (device != VK_NULL_HANDLE) {
+                // Destroy command pool
+                if (it->second.vkCommandPool != VK_NULL_HANDLE) {
+                    vkDestroyCommandPool(device, it->second.vkCommandPool, nullptr);
+                }
+
+                // Destroy images and memory
                 for (size_t i = 0; i < it->second.vkImages.size(); i++) {
                     if (it->second.vkImages[i] != VK_NULL_HANDLE) {
                         vkDestroyImage(device, it->second.vkImages[i], nullptr);

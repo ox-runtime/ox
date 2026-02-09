@@ -147,6 +147,52 @@ void* GetMetalDefaultDevice() {
     return (__bridge void*)device;
 }
 
+bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, void* dest, size_t destSize) {
+    if (!texture || !dest) {
+        LOG_ERROR("CopyMetalTextureToMemory: Invalid parameters");
+        return false;
+    }
+
+    id<MTLTexture> mtlTexture = (__bridge id<MTLTexture>)texture;
+
+    // Verify we have enough space (RGBA8)
+    size_t requiredSize = width * height * 4;
+    if (destSize < requiredSize) {
+        LOG_ERROR("CopyMetalTextureToMemory: Destination buffer too small");
+        return false;
+    }
+
+    // Get bytes per row (must be aligned to 256 bytes for Metal)
+    NSUInteger bytesPerRow = width * 4;
+    NSUInteger alignedBytesPerRow = (bytesPerRow + 255) & ~255;  // Align to 256 bytes
+
+    // Read the texture data
+    MTLRegion region = MTLRegionMake2D(0, 0, width, height);
+
+    // If alignment matches, copy directly
+    if (alignedBytesPerRow == bytesPerRow) {
+        [mtlTexture getBytes:dest
+                 bytesPerRow:bytesPerRow
+                  fromRegion:region
+                 mipmapLevel:0];
+    } else {
+        // Need temporary buffer for aligned read
+        std::vector<uint8_t> tempBuffer(alignedBytesPerRow * height);
+        [mtlTexture getBytes:tempBuffer.data()
+                 bytesPerRow:alignedBytesPerRow
+                  fromRegion:region
+                 mipmapLevel:0];
+
+        // Copy to destination, removing padding
+        uint8_t* dst = static_cast<uint8_t*>(dest);
+        for (uint32_t y = 0; y < height; y++) {
+            memcpy(dst + y * bytesPerRow, tempBuffer.data() + y * alignedBytesPerRow, bytesPerRow);
+        }
+    }
+
+    return true;
+}
+
 }  // namespace client
 }  // namespace ox
 

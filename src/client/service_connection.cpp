@@ -26,7 +26,7 @@ bool ServiceConnection::Connect() {
     shared_data_ = static_cast<protocol::SharedData*>(shared_mem_.GetPointer());
 
     // Verify protocol version
-    uint32_t version = shared_data_->fields.protocol_version.load(std::memory_order_acquire);
+    uint32_t version = shared_data_->protocol_version.load(std::memory_order_acquire);
     if (version != protocol::PROTOCOL_VERSION) {
         std::ostringstream error_msg;
         error_msg << "Protocol version mismatch - service: " << version
@@ -54,7 +54,7 @@ bool ServiceConnection::Connect() {
     }
 
     connected_ = true;
-    shared_data_->fields.client_connected.store(1, std::memory_order_release);
+    shared_data_->client_connected.store(1, std::memory_order_release);
 
     LOG_INFO("Connected to ox-service successfully");
     return true;
@@ -70,7 +70,7 @@ void ServiceConnection::Disconnect() {
     SendRequest(protocol::MessageType::DISCONNECT);
 
     if (shared_data_) {
-        shared_data_->fields.client_connected.store(0, std::memory_order_release);
+        shared_data_->client_connected.store(0, std::memory_order_release);
     }
 
     control_.Close();

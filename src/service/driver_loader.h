@@ -205,6 +205,15 @@ class DriverLoader {
         return 0;
     }
 
+    bool HasSubmitFramePixels() const { return loaded_ && callbacks_.submit_frame_pixels; }
+
+    void SubmitFramePixels(uint32_t eye_index, uint32_t width, uint32_t height, uint32_t format, const void* pixel_data,
+                           uint32_t data_size) const {
+        if (loaded_ && callbacks_.submit_frame_pixels) {
+            callbacks_.submit_frame_pixels(eye_index, width, height, format, pixel_data, data_size);
+        }
+    }
+
     bool IsLoaded() const { return loaded_; }
 
    private:

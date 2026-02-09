@@ -176,6 +176,23 @@ struct View {
     float fov[4];  // angleLeft, angleRight, angleUp, angleDown
 };
 
+// Texture data for frame submission (per-eye)
+// Max resolution: 2048x2048 RGBA = 16MB per eye, 32MB total for stereo
+constexpr uint32_t MAX_TEXTURE_WIDTH = 2048;
+constexpr uint32_t MAX_TEXTURE_HEIGHT = 2048;
+constexpr uint32_t MAX_TEXTURE_CHANNELS = 4;  // RGBA
+constexpr uint32_t MAX_TEXTURE_SIZE = MAX_TEXTURE_WIDTH * MAX_TEXTURE_HEIGHT * MAX_TEXTURE_CHANNELS;
+
+struct FrameTexture {
+    std::atomic<uint32_t> width;
+    std::atomic<uint32_t> height;
+    std::atomic<uint32_t> format;     // Graphics API-specific format (e.g., GL_RGBA8, VK_FORMAT_R8G8B8A8_UNORM)
+    std::atomic<uint32_t> data_size;  // Actual size of pixel data
+    std::atomic<uint32_t> ready;      // 1 when data is ready to be read by driver
+    uint32_t padding[3];
+    std::byte pixel_data[MAX_TEXTURE_SIZE];  // Raw RGBA pixel data
+};
+
 // Frame state (shared memory hot path)
 struct alignas(64) FrameState {
     std::atomic<uint64_t> frame_id;
@@ -190,40 +207,25 @@ struct alignas(64) FrameState {
     uint32_t padding1;
     DevicePose device_poses[MAX_TRACKED_DEVICES];
 
-    // Graphics handles (platform specific)
-#ifdef _WIN32
-    uint64_t texture_handles[2];  // HANDLE as uint64_t
-#else
-    int32_t texture_fds[2];
-#endif
+    // Frame textures (left and right eye)
+    FrameTexture textures[2];
 };
-
-// Shared memory layout (only dynamic data - hot path optimized)
-constexpr std::size_t SHARED_DATA_SIZE = 8192;  // 8KB total size
 
 // Shared data with automatic sizing
 struct alignas(4096) SharedData {
-    union {
-        struct {
-            std::atomic<uint32_t> protocol_version;
-            std::atomic<uint32_t> service_ready;
-            std::atomic<uint32_t> client_connected;
-            uint32_t padding1;
+    std::atomic<uint32_t> protocol_version;
+    std::atomic<uint32_t> service_ready;
+    std::atomic<uint32_t> client_connected;
+    uint32_t padding1;
 
-            // Session state (dynamic)
-            std::atomic<uint32_t> session_state;  // SessionState enum
-            std::atomic<uint64_t> active_session_handle;
+    // Session state (dynamic)
+    std::atomic<uint32_t> session_state;  // SessionState enum
+    std::atomic<uint64_t> active_session_handle;
 
-            // Frame state (hot path - 90Hz updates)
-            FrameState frame_state;
-        } fields;
-
-        // Union with raw array ensures exact size without manual padding calculation
-        std::byte raw[SHARED_DATA_SIZE];
-    };
+    // Frame state (hot path - 90Hz updates)
+    FrameState frame_state;
 };
 
-static_assert(sizeof(SharedData) == SHARED_DATA_SIZE, "SharedData size doesn't match SHARED_DATA_SIZE");
 static_assert(alignof(SharedData) == 4096, "SharedData alignment is not 4096 bytes");
 
 }  // namespace protocol

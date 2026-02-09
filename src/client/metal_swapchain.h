@@ -34,6 +34,11 @@ void ReleaseMetalSwapchainTextures(void** textures, uint32_t numTextures);
 // Get supported Metal pixel formats as int64_t values
 std::vector<int64_t> GetSupportedMetalFormats();
 
+// Copy Metal texture pixels to CPU memory
+// Returns true on success, false on failure
+bool CopyMetalTextureToMemory(void* texture,  // id<MTLTexture>
+                              uint32_t width, uint32_t height, void* dest, size_t destSize);
+
 }  // namespace client
 }  // namespace ox
 

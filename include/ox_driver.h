@@ -172,6 +172,20 @@ struct OxDriverCallbacks {
     // Example profile: "/interaction_profiles/khr/simple_controller"
     // This callback is optional - if NULL, driver supports /interaction_profiles/khr/simple_controller by default
     uint32_t (*get_interaction_profiles)(const char** profiles, uint32_t max_profiles);
+
+    // ========== Frame Submission (Optional) ==========
+
+    // Called when a frame is submitted via xrEndFrame
+    // eye_index: 0 = left, 1 = right
+    // width, height: dimensions of the texture
+    // format: Graphics API-specific format (e.g., GL_RGBA8, VK_FORMAT_R8G8B8A8_UNORM)
+    // pixel_data: Pointer to raw RGBA pixel data in shared memory (width * height * 4 bytes)
+    // data_size: Size of pixel_data in bytes
+    // This callback is optional - set to NULL if the driver doesn't support frame submission
+    // The driver can use this data directly (zero-copy) - DO NOT free this memory
+    // The pixel_data pointer remains valid until the next frame submission
+    void (*submit_frame_pixels)(uint32_t eye_index, uint32_t width, uint32_t height, uint32_t format,
+                                const void* pixel_data, uint32_t data_size);
 };
 
 // Every driver MUST export this function
