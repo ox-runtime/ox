@@ -67,7 +67,6 @@
 #endif
 
 #include "../logging.h"
-#include "iservice_connection.h"
 #include "service_connection.h"
 
 using namespace ox::client;

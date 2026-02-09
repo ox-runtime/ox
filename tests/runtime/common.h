@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "../../src/client/iservice_connection.h"
+#include "../../src/client/service_connection.h"
 #include "../../src/protocol/messages.h"
 
 // Declare the injection function
