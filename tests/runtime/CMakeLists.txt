@@ -8,17 +8,12 @@ set(RUNTIME_TEST_SOURCES
 # Add Metal test for macOS
 if(APPLE AND OX_METAL)
     list(APPEND RUNTIME_TEST_SOURCES test_metal.mm)
-endif()
-
-add_executable(runtime_tests ${RUNTIME_TEST_SOURCES})
-
-# Add Metal implementation for macOS
-if(APPLE AND OX_METAL)
-    target_sources(runtime_tests PRIVATE ../../src/client/metal_swapchain.mm)
-    set_source_files_properties(../../src/client/metal_swapchain.mm PROPERTIES
+    set_source_files_properties(../../src/client/runtime.cpp PROPERTIES
         COMPILE_FLAGS "-x objective-c++"
     )
 endif()
+
+add_executable(runtime_tests ${RUNTIME_TEST_SOURCES})
 
 # Force gtest to use shared CRT to match the runtime tests
 if(MSVC)

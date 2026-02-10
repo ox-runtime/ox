@@ -90,15 +90,10 @@ set(OX_RUNTIME_SOURCES
 )
 
 # Add Metal implementation for macOS
-if(APPLE)
-    option(OX_METAL "Enable Metal graphics API support on macOS" ON)
-    if(OX_METAL)
-        list(APPEND OX_RUNTIME_SOURCES src/client/metal_swapchain.mm)
-        # Enable Objective-C++ for .mm files
-        set_source_files_properties(src/client/metal_swapchain.mm PROPERTIES
-            COMPILE_FLAGS "-x objective-c++"
-        )
-    endif()
+if(APPLE AND OX_METAL)
+    set_source_files_properties(src/client/runtime.cpp PROPERTIES
+        COMPILE_FLAGS "-x objective-c++"
+    )
 endif()
 
 # Function to configure graphics APIs for a target

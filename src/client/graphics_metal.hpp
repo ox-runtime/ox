@@ -1,15 +1,23 @@
+#pragma once
+
 #ifdef __APPLE__
 #ifdef __OBJC__
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <vector>
 
-#import "metal_swapchain.h"
-#import <Metal/Metal.h>
-#import <Foundation/Foundation.h>
 #include "../logging.h"
+
+typedef void* id;
+typedef struct objc_object* MTLDevice_id;
+typedef struct objc_object* MTLCommandQueue_id;
+typedef struct objc_object* MTLTexture_id;
 
 namespace ox {
 namespace client {
+namespace metal {
 
 // Map OpenXR format (as int64_t) to MTLPixelFormat
 static MTLPixelFormat MapFormatToMetal(int64_t format) {
@@ -28,41 +36,32 @@ static MTLPixelFormat MapFormatToMetal(int64_t format) {
     }
 }
 
-bool CreateMetalSwapchainTextures(
-    void* metalCommandQueue,
-    uint32_t width,
-    uint32_t height,
-    int64_t format,
-    uint32_t numImages,
-    void** outTextures)
-{
+bool CreateTextures(void* metalCommandQueue, uint32_t width, uint32_t height, int64_t format, uint32_t numImages,
+                    void** outTextures) {
     if (!metalCommandQueue || !outTextures || numImages == 0) {
-        LOG_ERROR("CreateMetalSwapchainTextures: Invalid parameters");
+        LOG_ERROR("CreateTextures: Invalid parameters");
         return false;
     }
 
     id<MTLCommandQueue> commandQueue = (__bridge id<MTLCommandQueue>)metalCommandQueue;
     id<MTLDevice> device = commandQueue.device;
     if (!device) {
-        LOG_ERROR("CreateMetalSwapchainTextures: Invalid Metal command queue");
+        LOG_ERROR("CreateTextures: Invalid Metal command queue");
         return false;
     }
 
     MTLPixelFormat mtlFormat = MapFormatToMetal(format);
-    
-    LOG_INFO(("Creating " + std::to_string(numImages) + " Metal textures: " + 
-              std::to_string(width) + "x" + std::to_string(height) + 
-              " format=" + std::to_string(static_cast<int>(mtlFormat))).c_str());
+
+    LOG_INFO(("Creating " + std::to_string(numImages) + " Metal textures: " + std::to_string(width) + "x" +
+              std::to_string(height) + " format=" + std::to_string(static_cast<int>(mtlFormat)))
+                 .c_str());
 
     // Create texture descriptor
-    MTLTextureDescriptor* descriptor = [MTLTextureDescriptor 
-        texture2DDescriptorWithPixelFormat:mtlFormat
-        width:width
-        height:height
-        mipmapped:NO];
-    
+    MTLTextureDescriptor* descriptor =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:mtlFormat width:width height:height mipmapped:NO];
+
     if (!descriptor) {
-        LOG_ERROR("CreateMetalSwapchainTextures: Failed to create texture descriptor");
+        LOG_ERROR("CreateTextures: Failed to create texture descriptor");
         return false;
     }
 
@@ -76,7 +75,7 @@ bool CreateMetalSwapchainTextures(
         descriptor.resourceOptions = MTLResourceStorageModePrivate;
         LOG_DEBUG("Using Metal 1.0 resourceOptions API");
     }
-    
+
     if (@available(macOS 10.11.4, iOS 9.0, *)) {
         // Metal 1.1+: Set texture usage hints
         descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
@@ -89,11 +88,10 @@ bool CreateMetalSwapchainTextures(
     // Create textures (same for all Metal versions)
     for (uint32_t i = 0; i < numImages; i++) {
         id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
-        
+
         if (!texture) {
-            LOG_ERROR(("CreateMetalSwapchainTextures: Failed to create texture " + 
-                      std::to_string(i)).c_str());
-            
+            LOG_ERROR(("CreateTextures: Failed to create texture " + std::to_string(i)).c_str());
+
             // Clean up previously created textures
             for (uint32_t j = 0; j < i; j++) {
                 if (outTextures[j]) {
@@ -106,16 +104,15 @@ bool CreateMetalSwapchainTextures(
 
         // Retain the texture and store as void*
         outTextures[i] = (void*)CFBridgingRetain(texture);
-        
-        LOG_DEBUG(("Created Metal texture " + std::to_string(i) + 
-                  " successfully").c_str());
+
+        LOG_DEBUG(("Created Metal texture " + std::to_string(i) + " successfully").c_str());
     }
 
     LOG_INFO(("Successfully created " + std::to_string(numImages) + " Metal textures").c_str());
     return true;
 }
 
-void ReleaseMetalSwapchainTextures(void** textures, uint32_t numTextures) {
+void DestroyTextures(void** textures, uint32_t numTextures) {
     if (!textures) {
         return;
     }
@@ -133,7 +130,7 @@ void ReleaseMetalSwapchainTextures(void** textures, uint32_t numTextures) {
     LOG_INFO(("Released " + std::to_string(numTextures) + " Metal textures").c_str());
 }
 
-std::vector<int64_t> GetSupportedMetalFormats() {
+std::vector<int64_t> GetSupportedFormats() {
     return {
         static_cast<int64_t>(MTLPixelFormatRGBA8Unorm),
         static_cast<int64_t>(MTLPixelFormatRGBA8Unorm_sRGB),
@@ -142,14 +139,14 @@ std::vector<int64_t> GetSupportedMetalFormats() {
     };
 }
 
-void* GetMetalDefaultDevice() {
+void* GetDefaultDevice() {
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     return (__bridge void*)device;
 }
 
-bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, void* dest, size_t destSize) {
+bool CopyTextureToMemory(void* texture, uint32_t width, uint32_t height, void* dest, size_t destSize) {
     if (!texture || !dest) {
-        LOG_ERROR("CopyMetalTextureToMemory: Invalid parameters");
+        LOG_ERROR("CopyTextureToMemory: Invalid parameters");
         return false;
     }
 
@@ -158,7 +155,7 @@ bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, vo
     // Verify we have enough space (RGBA8)
     size_t requiredSize = width * height * 4;
     if (destSize < requiredSize) {
-        LOG_ERROR("CopyMetalTextureToMemory: Destination buffer too small");
+        LOG_ERROR("CopyTextureToMemory: Destination buffer too small");
         return false;
     }
 
@@ -171,17 +168,11 @@ bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, vo
 
     // If alignment matches, copy directly
     if (alignedBytesPerRow == bytesPerRow) {
-        [mtlTexture getBytes:dest
-                 bytesPerRow:bytesPerRow
-                  fromRegion:region
-                 mipmapLevel:0];
+        [mtlTexture getBytes:dest bytesPerRow:bytesPerRow fromRegion:region mipmapLevel:0];
     } else {
         // Need temporary buffer for aligned read
         std::vector<uint8_t> tempBuffer(alignedBytesPerRow * height);
-        [mtlTexture getBytes:tempBuffer.data()
-                 bytesPerRow:alignedBytesPerRow
-                  fromRegion:region
-                 mipmapLevel:0];
+        [mtlTexture getBytes:tempBuffer.data() bytesPerRow:alignedBytesPerRow fromRegion:region mipmapLevel:0];
 
         // Copy to destination, removing padding
         uint8_t* dst = static_cast<uint8_t*>(dest);
@@ -193,8 +184,61 @@ bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, vo
     return true;
 }
 
+// Detect Metal graphics binding from session create info
+bool DetectGraphicsBinding(const void* next, void** outBinding) {
+    while (next) {
+        const XrBaseInStructure* header = reinterpret_cast<const XrBaseInStructure*>(next);
+        if (header->type == XR_TYPE_GRAPHICS_BINDING_METAL_KHR) {
+            const XrGraphicsBindingMetalKHR* metalBinding = reinterpret_cast<const XrGraphicsBindingMetalKHR*>(header);
+            if (outBinding) {
+                *outBinding = metalBinding->commandQueue;
+            }
+            LOG_DEBUG(("DetectGraphicsBinding: Metal graphics binding - commandQueue=" +
+                       std::to_string(reinterpret_cast<uintptr_t>(metalBinding->commandQueue)))
+                          .c_str());
+            return true;
+        }
+        next = header->next;
+    }
+    return false;
+}
+
+// Populate swapchain images for Metal
+void PopulateSwapchainImages(const std::vector<void*>& metalTextures, uint32_t numImages, XrStructureType imageType,
+                             XrSwapchainImageBaseHeader* images) {
+    for (uint32_t i = 0; i < numImages; ++i) {
+        XrSwapchainImageMetalKHR* metalImages = reinterpret_cast<XrSwapchainImageMetalKHR*>(images);
+        metalImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
+        metalImages[i].next = nullptr;
+        metalImages[i].texture = (i < metalTextures.size()) ? metalTextures[i] : nullptr;
+    }
+}
+
+void* GetMetalDefaultDevice() {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    return (__bridge void*)device;
+}
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId,
+                                                                 XrGraphicsRequirementsMetalKHR* graphicsRequirements) {
+    LOG_DEBUG("xrGetMetalGraphicsRequirementsKHR called");
+    if (!graphicsRequirements) {
+        return XR_ERROR_VALIDATION_FAILURE;
+    }
+    graphicsRequirements->type = XR_TYPE_GRAPHICS_REQUIREMENTS_METAL_KHR;
+    graphicsRequirements->next = nullptr;
+    graphicsRequirements->metalDevice = GetMetalDefaultDevice();
+    return XR_SUCCESS;
+}
+
+}  // namespace metal
 }  // namespace client
 }  // namespace ox
+
+extern "C" void* GetMetalDefaultDevice() {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    return (__bridge void*)device;
+}
 
 #endif  // __OBJC__
 #endif  // __APPLE__

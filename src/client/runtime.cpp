@@ -1,54 +1,59 @@
-// Include platform headers before OpenXR
+// Include platform headers
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#define NOMINMAX  // Prevent Windows.h from defining min/max macros
+#define NOMINMAX
 #include <unknwn.h>
 #include <windows.h>
 #elif defined(__APPLE__)
 #include <TargetConditionals.h>
-#else
+#endif
+
+// Include Vulkan headers before OpenXR if Vulkan support is enabled
 #ifdef OX_OPENGL
+#ifdef _WIN32
+#include <GL/gl.h>
+#elif defined(__APPLE__)
+#include <OpenGL/gl.h>
+#define GL_SILENCE_DEPRECATION
+#else
+#include <GL/gl.h>
 #include <GL/glx.h>
 #include <X11/Xlib.h>
 #endif
-#endif
-
-// Include Vulkan headers before OpenXR
-#ifdef OX_VULKAN
-#include <vulkan/vulkan.h>
-#endif
-
-// Define graphics API usage macros based on enabled APIs
-#ifdef OX_OPENGL
 #define XR_USE_GRAPHICS_API_OPENGL
 #endif
+
 #ifdef OX_VULKAN
+#include <vulkan/vulkan.h>
 #define XR_USE_GRAPHICS_API_VULKAN
 #endif
+
 #ifdef OX_METAL
+#ifdef __APPLE__
+#ifdef __OBJC__
+#import <Foundation/Foundation.h>
+#import <Metal/Metal.h>
 #define XR_USE_GRAPHICS_API_METAL
 #define XR_KHR_metal_enable 1
 #endif
-
-// Silence OpenGL deprecation warnings on macOS
-#ifdef __APPLE__
-#define GL_SILENCE_DEPRECATION
+#endif
 #endif
 
 #include <openxr/openxr.h>
 #include <openxr/openxr_loader_negotiation.h>
 #include <openxr/openxr_platform.h>
 
-// Include OpenGL for texture creation
 #ifdef OX_OPENGL
-#ifdef _WIN32
-#include <GL/gl.h>
-#elif defined(__APPLE__)
-#include <OpenGL/gl.h>
-#else
-#include <GL/gl.h>
-#endif
-#endif
+#include "graphics_opengl.hpp"
+#endif  // OX_OPENGL
+
+#ifdef OX_VULKAN
+#include "graphics_vulkan.hpp"
+#endif  // OX_VULKAN
+
+#ifdef OX_METAL
+#include "graphics_metal.hpp"
+#endif  // OX_METAL
 
 #include <algorithm>
 #include <chrono>
@@ -62,10 +67,6 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef OX_METAL
-#include "metal_swapchain.h"
-#endif
-
 #include "../logging.h"
 #include "service_connection.h"
 
@@ -73,9 +74,14 @@ using namespace ox::client;
 using namespace ox::protocol;
 
 // Conditional defines for static builds (disable export attributes)
+// Note: XRAPI_ATTR and XRAPI_CALL are already defined by OpenXR headers
 #ifdef OX_BUILD_STATIC
+#ifndef XRAPI_ATTR
 #define XRAPI_ATTR
+#endif
+#ifndef XRAPI_CALL
 #define XRAPI_CALL
+#endif
 #endif
 
 // Graphics API enumeration
@@ -108,16 +114,7 @@ static std::unordered_map<XrSpace, XrSession> g_spaces;
 
 // Session graphics binding data
 struct SessionGraphicsBinding {
-#ifdef OX_VULKAN
-    VkDevice vkDevice = VK_NULL_HANDLE;
-    VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
-    VkInstance vkInstance = VK_NULL_HANDLE;
-    uint32_t queueFamilyIndex = 0;
-    uint32_t queueIndex = 0;
-#endif
-#ifdef OX_METAL
-    void* metalCommandQueue = nullptr;  // id<MTLCommandQueue> (opaque pointer)
-#endif
+    void* bindingData = nullptr;  // Opaque pointer to API-specific binding data
     GraphicsAPI graphicsAPI = GraphicsAPI::OpenGL;
 };
 static std::unordered_map<XrSession, SessionGraphicsBinding> g_session_graphics;
@@ -810,47 +807,25 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSession(XrInstance instance, const XrSess
     bool hasGraphicsBinding = false;
     SessionGraphicsBinding graphicsBinding;
 
-    while (next) {
-        const XrBaseInStructure* header = reinterpret_cast<const XrBaseInStructure*>(next);
+    // Try each graphics API's detection function
 #ifdef OX_OPENGL
-        if (header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR ||
-            header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR ||
-            header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_XCB_KHR ||
-            header->type == XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR) {
-            hasGraphicsBinding = true;
-            graphicsBinding.graphicsAPI = GraphicsAPI::OpenGL;
-            LOG_DEBUG("xrCreateSession: OpenGL graphics binding detected");
-            break;
-        }
+    if (!hasGraphicsBinding && opengl::DetectGraphicsBinding(next, &graphicsBinding.bindingData)) {
+        hasGraphicsBinding = true;
+        graphicsBinding.graphicsAPI = GraphicsAPI::OpenGL;
+    }
 #endif
 #ifdef OX_VULKAN
-        if (header->type == XR_TYPE_GRAPHICS_BINDING_VULKAN_KHR) {
-            hasGraphicsBinding = true;
-            const XrGraphicsBindingVulkanKHR* vkBinding = reinterpret_cast<const XrGraphicsBindingVulkanKHR*>(header);
-            graphicsBinding.vkInstance = vkBinding->instance;
-            graphicsBinding.vkPhysicalDevice = vkBinding->physicalDevice;
-            graphicsBinding.vkDevice = vkBinding->device;
-            graphicsBinding.queueFamilyIndex = vkBinding->queueFamilyIndex;
-            graphicsBinding.queueIndex = vkBinding->queueIndex;
-            graphicsBinding.graphicsAPI = GraphicsAPI::Vulkan;
-            LOG_DEBUG(("xrCreateSession: Vulkan graphics binding detected").c_str());
-            break;
-        }
+    if (!hasGraphicsBinding && vulkan::DetectGraphicsBinding(next, &graphicsBinding.bindingData)) {
+        hasGraphicsBinding = true;
+        graphicsBinding.graphicsAPI = GraphicsAPI::Vulkan;
+    }
 #endif
 #ifdef OX_METAL
-        if (header->type == XR_TYPE_GRAPHICS_BINDING_METAL_KHR) {
-            hasGraphicsBinding = true;
-            const XrGraphicsBindingMetalKHR* metalBinding = reinterpret_cast<const XrGraphicsBindingMetalKHR*>(header);
-            graphicsBinding.metalCommandQueue = metalBinding->commandQueue;
-            graphicsBinding.graphicsAPI = GraphicsAPI::Metal;
-            LOG_DEBUG(("xrCreateSession: Metal graphics binding - commandQueue=" +
-                       std::to_string(reinterpret_cast<uintptr_t>(metalBinding->commandQueue)))
-                          .c_str());
-            break;
-        }
-#endif
-        next = header->next;
+    if (!hasGraphicsBinding && metal::DetectGraphicsBinding(next, &graphicsBinding.bindingData)) {
+        hasGraphicsBinding = true;
+        graphicsBinding.graphicsAPI = GraphicsAPI::Metal;
     }
+#endif
 
     if (hasGraphicsBinding) {
         LOG_INFO("Session created with graphics binding");
@@ -1101,200 +1076,6 @@ XRAPI_ATTR XrResult XRAPI_CALL xrWaitFrame(XrSession session, const XrFrameWaitI
     return XR_SUCCESS;
 }
 
-// Helper functions to copy texture pixels to CPU memory
-#ifdef OX_OPENGL
-static bool CopyGLTextureToMemory(uint32_t textureId, uint32_t width, uint32_t height, std::byte* dest,
-                                  size_t destSize) {
-    // Verify we have enough space (RGBA8)
-    size_t requiredSize = width * height * 4;
-    if (destSize < requiredSize) {
-        LOG_ERROR("Destination buffer too small for texture data");
-        return false;
-    }
-
-    // Clear any previous errors
-    while (glGetError() != GL_NO_ERROR);
-
-    // Bind the texture and read pixels directly as RGBA
-    glBindTexture(GL_TEXTURE_2D, textureId);
-
-    GLenum bindError = glGetError();
-    if (bindError != GL_NO_ERROR) {
-        LOG_ERROR(
-            ("OpenGL error binding texture " + std::to_string(textureId) + ": " + std::to_string(bindError)).c_str());
-        return false;
-    }
-
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, dest);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Check for GL errors
-    GLenum error = glGetError();
-    if (error != GL_NO_ERROR) {
-        LOG_ERROR(("OpenGL error reading texture " + std::to_string(textureId) + ": " + std::to_string(error)).c_str());
-        return false;
-    }
-
-    return true;
-}
-#endif
-
-#ifdef OX_VULKAN
-static bool CopyVulkanTextureToMemory(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue,
-                                      VkCommandPool commandPool, VkImage image, uint32_t width, uint32_t height,
-                                      VkFormat format, std::byte* dest, size_t destSize) {
-    size_t requiredSize = width * height * 4;
-    if (destSize < requiredSize) {
-        LOG_ERROR("Destination buffer too small for texture data");
-        return false;
-    }
-
-    // Create staging buffer
-    VkBufferCreateInfo bufferInfo = {};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = requiredSize;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkBuffer stagingBuffer;
-    if (vkCreateBuffer(device, &bufferInfo, nullptr, &stagingBuffer) != VK_SUCCESS) {
-        LOG_ERROR("Failed to create Vulkan staging buffer");
-        return false;
-    }
-
-    // Allocate host-visible memory
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(device, stagingBuffer, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-    uint32_t memoryTypeIndex = UINT32_MAX;
-    VkMemoryPropertyFlags requiredProps = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((memRequirements.memoryTypeBits & (1 << i)) &&
-            (memProperties.memoryTypes[i].propertyFlags & requiredProps) == requiredProps) {
-            memoryTypeIndex = i;
-            break;
-        }
-    }
-
-    if (memoryTypeIndex == UINT32_MAX) {
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        LOG_ERROR("Failed to find suitable Vulkan memory type");
-        return false;
-    }
-
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryTypeIndex;
-
-    VkDeviceMemory stagingMemory;
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &stagingMemory) != VK_SUCCESS) {
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        LOG_ERROR("Failed to allocate Vulkan staging memory");
-        return false;
-    }
-
-    vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0);
-
-    // Create command buffer for copy operation
-    VkCommandBufferAllocateInfo cmdAllocInfo = {};
-    cmdAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdAllocInfo.commandPool = commandPool;
-    cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdAllocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer cmdBuffer;
-    if (vkAllocateCommandBuffers(device, &cmdAllocInfo, &cmdBuffer) != VK_SUCCESS) {
-        vkFreeMemory(device, stagingMemory, nullptr);
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        LOG_ERROR("Failed to allocate Vulkan command buffer");
-        return false;
-    }
-
-    // Begin command buffer
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    vkBeginCommandBuffer(cmdBuffer, &beginInfo);
-
-    // Transition image to TRANSFER_SRC_OPTIMAL
-    VkImageMemoryBarrier barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-    vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
-                         nullptr, 0, nullptr, 1, &barrier);
-
-    // Copy image to buffer
-    VkBufferImageCopy region = {};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {width, height, 1};
-
-    vkCmdCopyImageToBuffer(cmdBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
-
-    // Transition back to COLOR_ATTACHMENT_OPTIMAL
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-    vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0,
-                         nullptr, 0, nullptr, 1, &barrier);
-
-    vkEndCommandBuffer(cmdBuffer);
-
-    // Submit and wait
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &cmdBuffer;
-
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
-
-    // Copy data from staging buffer to destination
-    void* data;
-    if (vkMapMemory(device, stagingMemory, 0, requiredSize, 0, &data) == VK_SUCCESS) {
-        std::memcpy(dest, data, requiredSize);
-        vkUnmapMemory(device, stagingMemory);
-    }
-
-    // Cleanup
-    vkFreeCommandBuffers(device, commandPool, 1, &cmdBuffer);
-    vkFreeMemory(device, stagingMemory, nullptr);
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-
-    return true;
-}
-#endif
-
-#ifdef OX_METAL
-// Forward declaration from metal_swapchain.h
-extern "C" bool CopyMetalTextureToMemory(void* texture, uint32_t width, uint32_t height, void* dest, size_t destSize);
-#endif
-
 XRAPI_ATTR XrResult XRAPI_CALL xrBeginFrame(XrSession session, const XrFrameBeginInfo* frameBeginInfo) {
     LOG_DEBUG("xrBeginFrame called");
     return XR_SUCCESS;
@@ -1360,16 +1141,16 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInf
 #ifdef OX_OPENGL
                         case GraphicsAPI::OpenGL:
                             if (imageIdx < swapchainData.glTextureIds.size()) {
-                                copySuccess =
-                                    CopyGLTextureToMemory(swapchainData.glTextureIds[imageIdx], swapchainData.width,
-                                                          swapchainData.height, frameTexture.pixel_data, destSize);
+                                copySuccess = opengl::CopyTextureToMemory(swapchainData.glTextureIds[imageIdx],
+                                                                          swapchainData.width, swapchainData.height,
+                                                                          frameTexture.pixel_data, destSize);
                             }
                             break;
 #endif
 #ifdef OX_VULKAN
                         case GraphicsAPI::Vulkan:
                             if (imageIdx < swapchainData.vkImages.size()) {
-                                copySuccess = CopyVulkanTextureToMemory(
+                                copySuccess = vulkan::CopyImageToMemory(
                                     swapchainData.vkDevice, swapchainData.vkPhysicalDevice, swapchainData.vkQueue,
                                     swapchainData.vkCommandPool, swapchainData.vkImages[imageIdx], swapchainData.width,
                                     swapchainData.height, static_cast<VkFormat>(swapchainData.format),
@@ -1380,9 +1161,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEndFrame(XrSession session, const XrFrameEndInf
 #ifdef OX_METAL
                         case GraphicsAPI::Metal:
                             if (imageIdx < swapchainData.metalTextures.size()) {
-                                copySuccess =
-                                    CopyMetalTextureToMemory(swapchainData.metalTextures[imageIdx], swapchainData.width,
-                                                             swapchainData.height, frameTexture.pixel_data, destSize);
+                                copySuccess = metal::CopyTextureToMemory(swapchainData.metalTextures[imageIdx],
+                                                                         swapchainData.width, swapchainData.height,
+                                                                         frameTexture.pixel_data, destSize);
                             }
                             break;
 #endif
@@ -1779,22 +1560,21 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainFormats(XrSession session, ui
                                                            uint32_t* formatCountOutput, int64_t* formats) {
     LOG_DEBUG("xrEnumerateSwapchainFormats called");
 
-    // Common formats supported on all platforms
+    // Get supported formats from each graphics API
     std::vector<int64_t> supportedFormats;
 
 #ifdef OX_OPENGL
-    supportedFormats.push_back(GL_RGBA);
-    supportedFormats.push_back(GL_RGBA8);
+    auto glFormats = opengl::GetSupportedFormats();
+    supportedFormats.insert(supportedFormats.end(), glFormats.begin(), glFormats.end());
 #endif
 
 #ifdef OX_VULKAN
-    supportedFormats.push_back(VK_FORMAT_R8G8B8A8_SRGB);
-    supportedFormats.push_back(VK_FORMAT_B8G8R8A8_SRGB);
-    supportedFormats.push_back(VK_FORMAT_R8G8B8A8_UNORM);
+    auto vkFormats = vulkan::GetSupportedFormats();
+    supportedFormats.insert(supportedFormats.end(), vkFormats.begin(), vkFormats.end());
 #endif
 
 #ifdef OX_METAL
-    auto metalFormats = GetSupportedMetalFormats();
+    auto metalFormats = metal::GetSupportedFormats();
     supportedFormats.insert(supportedFormats.end(), metalFormats.begin(), metalFormats.end());
 #endif
 
@@ -1863,21 +1643,12 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
 #endif
 #ifdef OX_VULKAN
             case GraphicsAPI::Vulkan: {
-                data.vkDevice = graphicsIt->second.vkDevice;
-                data.vkPhysicalDevice = graphicsIt->second.vkPhysicalDevice;
-
-                // Get the queue
-                vkGetDeviceQueue(data.vkDevice, graphicsIt->second.queueFamilyIndex, graphicsIt->second.queueIndex,
-                                 &data.vkQueue);
-
-                // Create command pool
-                VkCommandPoolCreateInfo poolInfo = {};
-                poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-                poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-                poolInfo.queueFamilyIndex = graphicsIt->second.queueFamilyIndex;
-
-                if (vkCreateCommandPool(data.vkDevice, &poolInfo, nullptr, &data.vkCommandPool) != VK_SUCCESS) {
-                    LOG_ERROR("Failed to create Vulkan command pool for swapchain");
+                vulkan::VulkanSwapchainData vkData;
+                if (vulkan::InitializeSwapchainData(graphicsIt->second.bindingData, vkData)) {
+                    data.vkDevice = vkData.device;
+                    data.vkPhysicalDevice = vkData.physicalDevice;
+                    data.vkQueue = vkData.queue;
+                    data.vkCommandPool = vkData.commandPool;
                 }
                 break;
             }
@@ -1885,7 +1656,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateSwapchain(XrSession session, const XrSwap
 #ifdef OX_METAL
             case GraphicsAPI::Metal:
                 // Store command queue for texture creation
-                data.metalCommandQueue = graphicsIt->second.metalCommandQueue;
+                data.metalCommandQueue = graphicsIt->second.bindingData;
                 LOG_DEBUG("Stored Metal command queue for swapchain");
                 break;
 #endif
@@ -1910,38 +1681,23 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
         // Delete OpenGL textures if they were created
 #ifdef OX_OPENGL
         if (!it->second.glTextureIds.empty()) {
-            glDeleteTextures(static_cast<GLsizei>(it->second.glTextureIds.size()), it->second.glTextureIds.data());
+            opengl::DestroyTextures(it->second.glTextureIds);
         }
 #endif
 
         // Destroy Vulkan images if they were created
 #ifdef OX_VULKAN
         if (it->second.graphicsAPI == GraphicsAPI::Vulkan) {
-            VkDevice device = it->second.vkDevice;
-            if (device != VK_NULL_HANDLE) {
-                // Destroy command pool
-                if (it->second.vkCommandPool != VK_NULL_HANDLE) {
-                    vkDestroyCommandPool(device, it->second.vkCommandPool, nullptr);
-                }
-
-                // Destroy images and memory
-                for (size_t i = 0; i < it->second.vkImages.size(); i++) {
-                    if (it->second.vkImages[i] != VK_NULL_HANDLE) {
-                        vkDestroyImage(device, it->second.vkImages[i], nullptr);
-                    }
-                    if (i < it->second.vkImageMemory.size() && it->second.vkImageMemory[i] != VK_NULL_HANDLE) {
-                        vkFreeMemory(device, it->second.vkImageMemory[i], nullptr);
-                    }
-                }
-            }
+            vulkan::DestroyImages(it->second.vkImages, it->second.vkImageMemory, it->second.vkCommandPool,
+                                  it->second.vkDevice);
         }
 #endif
 
 #ifdef OX_METAL
         // Destroy Metal textures if they were created
         if (it->second.graphicsAPI == GraphicsAPI::Metal && !it->second.metalTextures.empty()) {
-            ReleaseMetalSwapchainTextures(it->second.metalTextures.data(),
-                                          static_cast<uint32_t>(it->second.metalTextures.size()));
+            metal::DestroyTextures(it->second.metalTextures.data(),
+                                   static_cast<uint32_t>(it->second.metalTextures.size()));
             it->second.metalTextures.clear();
         }
 #endif
@@ -1951,139 +1707,6 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySwapchain(XrSwapchain swapchain) {
 
     return XR_SUCCESS;
 }
-
-// Helper functions for swapchain image creation
-#ifdef OX_OPENGL
-static void CreateOpenGLTextures(SwapchainData& data, uint32_t numImages) {
-    if (data.glTextureIds.empty()) {
-        data.glTextureIds.resize(numImages);
-        glGenTextures(numImages, data.glTextureIds.data());
-
-        // Initialize each texture with minimal settings
-        for (uint32_t i = 0; i < numImages; i++) {
-            glBindTexture(GL_TEXTURE_2D, data.glTextureIds[i]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, data.width, data.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        }
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-}
-#endif
-
-#ifdef OX_VULKAN
-static void CreateVulkanImages(SwapchainData& data, uint32_t numImages) {
-    if (data.vkImages.empty() && data.vkDevice != VK_NULL_HANDLE && data.vkPhysicalDevice != VK_NULL_HANDLE) {
-        data.vkImages.resize(numImages);
-        data.vkImageMemory.resize(numImages);
-
-        // Create actual Vulkan images
-        for (uint32_t i = 0; i < numImages; i++) {
-            VkImageCreateInfo imageInfo = {};
-            imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-            imageInfo.imageType = VK_IMAGE_TYPE_2D;
-            imageInfo.format = static_cast<VkFormat>(data.format);
-            imageInfo.extent.width = data.width;
-            imageInfo.extent.height = data.height;
-            imageInfo.extent.depth = 1;
-            imageInfo.mipLevels = 1;
-            imageInfo.arrayLayers = 1;
-            imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-            imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            imageInfo.usage =
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-            VkResult result = vkCreateImage(data.vkDevice, &imageInfo, nullptr, &data.vkImages[i]);
-            if (result != VK_SUCCESS) {
-                LOG_ERROR(("Failed to create Vulkan image: " + std::to_string(result)).c_str());
-                data.vkImages[i] = VK_NULL_HANDLE;
-                continue;
-            }
-
-            // Allocate memory for the image
-            VkMemoryRequirements memRequirements;
-            vkGetImageMemoryRequirements(data.vkDevice, data.vkImages[i], &memRequirements);
-
-            // Find suitable memory type
-            VkPhysicalDeviceMemoryProperties memProperties;
-            vkGetPhysicalDeviceMemoryProperties(data.vkPhysicalDevice, &memProperties);
-
-            uint32_t memoryTypeIndex = UINT32_MAX;
-            VkMemoryPropertyFlags requiredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            for (uint32_t j = 0; j < memProperties.memoryTypeCount; j++) {
-                if ((memRequirements.memoryTypeBits & (1 << j)) &&
-                    (memProperties.memoryTypes[j].propertyFlags & requiredProperties) == requiredProperties) {
-                    memoryTypeIndex = j;
-                    break;
-                }
-            }
-
-            if (memoryTypeIndex == UINT32_MAX) {
-                LOG_ERROR("Failed to find suitable memory type for Vulkan image");
-                vkDestroyImage(data.vkDevice, data.vkImages[i], nullptr);
-                data.vkImages[i] = VK_NULL_HANDLE;
-                continue;
-            }
-
-            VkMemoryAllocateInfo allocInfo = {};
-            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = memoryTypeIndex;
-
-            result = vkAllocateMemory(data.vkDevice, &allocInfo, nullptr, &data.vkImageMemory[i]);
-            if (result != VK_SUCCESS) {
-                LOG_ERROR(("Failed to allocate Vulkan image memory: " + std::to_string(result)).c_str());
-                vkDestroyImage(data.vkDevice, data.vkImages[i], nullptr);
-                data.vkImages[i] = VK_NULL_HANDLE;
-                data.vkImageMemory[i] = VK_NULL_HANDLE;
-                continue;
-            }
-
-            result = vkBindImageMemory(data.vkDevice, data.vkImages[i], data.vkImageMemory[i], 0);
-            if (result != VK_SUCCESS) {
-                LOG_ERROR(("Failed to bind Vulkan image memory: " + std::to_string(result)).c_str());
-                vkFreeMemory(data.vkDevice, data.vkImageMemory[i], nullptr);
-                vkDestroyImage(data.vkDevice, data.vkImages[i], nullptr);
-                data.vkImages[i] = VK_NULL_HANDLE;
-                data.vkImageMemory[i] = VK_NULL_HANDLE;
-                continue;
-            }
-
-            LOG_DEBUG(("Created Vulkan image " + std::to_string(i) + " successfully").c_str());
-        }
-    } else if (data.vkDevice == VK_NULL_HANDLE || data.vkPhysicalDevice == VK_NULL_HANDLE) {
-        LOG_ERROR("No Vulkan device found for session - cannot create swapchain images");
-        // Fill with null handles
-        data.vkImages.resize(numImages, VK_NULL_HANDLE);
-        data.vkImageMemory.resize(numImages, VK_NULL_HANDLE);
-    }
-}
-#endif
-
-#ifdef OX_METAL
-// Helper function to create Metal textures using Objective-C++ implementation
-static void CreateMetalTextures(SwapchainData& data, uint32_t numImages) {
-    if (!data.metalCommandQueue) {
-        LOG_ERROR("No Metal command queue available for swapchain texture creation");
-        data.metalTextures.resize(numImages, nullptr);
-        return;
-    }
-
-    // Allocate space for texture pointers
-    data.metalTextures.resize(numImages, nullptr);
-
-    // Create actual Metal textures using Objective-C++ implementation
-    bool success = CreateMetalSwapchainTextures(data.metalCommandQueue, data.width, data.height, data.format, numImages,
-                                                data.metalTextures.data());
-
-    if (!success) {
-        LOG_ERROR("Failed to create Metal swapchain textures");
-        // The failed textures vector will be cleaned up later
-    }
-}
-#endif
 
 XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain, uint32_t imageCapacityInput,
                                                           uint32_t* imageCountOutput,
@@ -2112,62 +1735,55 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSwapchainImages(XrSwapchain swapchain,
     switch (it->second.graphicsAPI) {
 #ifdef OX_OPENGL
         case GraphicsAPI::OpenGL:
-            CreateOpenGLTextures(it->second, numImages);
+            opengl::CreateTextures(it->second.glTextureIds, it->second.width, it->second.height, numImages);
             break;
 #endif
 #ifdef OX_VULKAN
         case GraphicsAPI::Vulkan:
-            CreateVulkanImages(it->second, numImages);
+            vulkan::CreateImages(it->second.vkImages, it->second.vkImageMemory, it->second.vkDevice,
+                                 it->second.vkPhysicalDevice, it->second.width, it->second.height, it->second.format,
+                                 numImages);
             break;
 #endif
 #ifdef OX_METAL
-        case GraphicsAPI::Metal:
-            CreateMetalTextures(it->second, numImages);
+        case GraphicsAPI::Metal: {
+            // Allocate space for texture pointers
+            it->second.metalTextures.resize(numImages, nullptr);
+            metal::CreateTextures(it->second.metalCommandQueue, it->second.width, it->second.height, it->second.format,
+                                  numImages, it->second.metalTextures.data());
             break;
+        }
 #endif
         default:
             LOG_ERROR("Unsupported graphics API for swapchain creation");
             return XR_ERROR_GRAPHICS_REQUIREMENTS_CALL_MISSING;
     }
 
-    // Populate the image array
-    for (uint32_t i = 0; i < imageCapacityInput && i < numImages; ++i) {
-        switch (it->second.graphicsAPI) {
+    // Populate the image array using API-specific helper functions
+    uint32_t count = std::min(imageCapacityInput, numImages);
+    switch (it->second.graphicsAPI) {
 #ifdef OX_OPENGL
-            case GraphicsAPI::OpenGL: {
-                // Cast to OpenGL structure (works for both GL and GLES)
-                XrSwapchainImageOpenGLKHR* glImages = reinterpret_cast<XrSwapchainImageOpenGLKHR*>(images);
-                glImages[i].type = imageType;  // Preserve the original type
-                glImages[i].next = nullptr;
-                glImages[i].image = (i < it->second.glTextureIds.size()) ? it->second.glTextureIds[i] : 0;
-                break;
-            }
+        case GraphicsAPI::OpenGL:
+            opengl::PopulateSwapchainImages(it->second.glTextureIds, count, imageType, images);
+            break;
 #endif
 #ifdef OX_VULKAN
-            case GraphicsAPI::Vulkan: {
-                XrSwapchainImageVulkanKHR* vkImages = reinterpret_cast<XrSwapchainImageVulkanKHR*>(images);
-                vkImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR;
-                vkImages[i].next = nullptr;
-                vkImages[i].image = (i < it->second.vkImages.size()) ? it->second.vkImages[i] : VK_NULL_HANDLE;
-                break;
-            }
+        case GraphicsAPI::Vulkan:
+            vulkan::PopulateSwapchainImages(it->second.vkImages, count, imageType, images);
+            break;
 #endif
 #ifdef OX_METAL
-            case GraphicsAPI::Metal: {
-                XrSwapchainImageMetalKHR* metalImages = reinterpret_cast<XrSwapchainImageMetalKHR*>(images);
-                metalImages[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
-                metalImages[i].next = nullptr;
-                metalImages[i].texture = (i < it->second.metalTextures.size()) ? it->second.metalTextures[i] : nullptr;
-                break;
-            }
+        case GraphicsAPI::Metal:
+            metal::PopulateSwapchainImages(it->second.metalTextures, count, imageType, images);
+            break;
 #endif
-            default: {
-                // For other graphics APIs, just set the base header
+        default:
+            // For other graphics APIs, just set the base headers
+            for (uint32_t i = 0; i < count; ++i) {
                 images[i].type = imageType;
                 images[i].next = nullptr;
-                break;
             }
-        }
+            break;
     }
 
     return XR_SUCCESS;
@@ -2282,237 +1898,6 @@ XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateViveTrackerPathsHTCX(XrInstance instan
     return XR_SUCCESS;
 }
 
-// OpenGL extension
-#ifdef OX_OPENGL
-XRAPI_ATTR XrResult XRAPI_CALL xrGetOpenGLGraphicsRequirementsKHR(
-    XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsOpenGLKHR* graphicsRequirements) {
-    LOG_DEBUG("xrGetOpenGLGraphicsRequirementsKHR called");
-    if (!graphicsRequirements) {
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-    graphicsRequirements->minApiVersionSupported = XR_MAKE_VERSION(1, 1, 0);
-    graphicsRequirements->maxApiVersionSupported = XR_MAKE_VERSION(4, 6, 0);
-    return XR_SUCCESS;
-}
-#endif
-
-// Vulkan extension
-#ifdef OX_VULKAN
-XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsRequirementsKHR(
-    XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsVulkanKHR* graphicsRequirements) {
-    LOG_DEBUG("xrGetVulkanGraphicsRequirementsKHR called");
-    if (!graphicsRequirements) {
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-    graphicsRequirements->minApiVersionSupported = XR_MAKE_VERSION(1, 0, 0);
-    graphicsRequirements->maxApiVersionSupported = XR_MAKE_VERSION(1, 3, 0);
-    return XR_SUCCESS;
-}
-
-// Vulkan extension 2 (newer version)
-XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsRequirements2KHR(
-    XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsVulkanKHR* graphicsRequirements) {
-    LOG_DEBUG("xrGetVulkanGraphicsRequirements2KHR called");
-    // Same implementation as xrGetVulkanGraphicsRequirementsKHR
-    return xrGetVulkanGraphicsRequirementsKHR(instance, systemId, graphicsRequirements);
-}
-#endif
-
-#ifdef OX_METAL
-// Metal extension
-extern "C" {
-XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId,
-                                                                 XrGraphicsRequirementsMetalKHR* graphicsRequirements) {
-    LOG_DEBUG("xrGetMetalGraphicsRequirementsKHR called");
-    if (!graphicsRequirements) {
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-    graphicsRequirements->type = XR_TYPE_GRAPHICS_REQUIREMENTS_METAL_KHR;
-    graphicsRequirements->next = nullptr;
-    graphicsRequirements->metalDevice = GetMetalDefaultDevice();
-    return XR_SUCCESS;
-}
-}
-#endif
-
-#ifdef OX_VULKAN
-XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanInstanceExtensionsKHR(XrInstance instance, XrSystemId systemId,
-                                                                uint32_t bufferCapacityInput,
-                                                                uint32_t* bufferCountOutput, char* buffer) {
-    LOG_DEBUG("xrGetVulkanInstanceExtensionsKHR called");
-    const char* extensions = "VK_KHR_surface";
-    uint32_t len = strlen(extensions) + 1;
-    if (bufferCountOutput) {
-        *bufferCountOutput = len;
-    }
-    if (bufferCapacityInput >= len && buffer) {
-        safe_copy_string(buffer, bufferCapacityInput, extensions);
-    }
-    return XR_SUCCESS;
-}
-
-XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanDeviceExtensionsKHR(XrInstance instance, XrSystemId systemId,
-                                                              uint32_t bufferCapacityInput, uint32_t* bufferCountOutput,
-                                                              char* buffer) {
-    LOG_DEBUG("xrGetVulkanDeviceExtensionsKHR called");
-    const char* extensions = "VK_KHR_swapchain";
-    uint32_t len = strlen(extensions) + 1;
-    if (bufferCountOutput) {
-        *bufferCountOutput = len;
-    }
-    if (bufferCapacityInput >= len && buffer) {
-        safe_copy_string(buffer, bufferCapacityInput, extensions);
-    }
-    return XR_SUCCESS;
-}
-
-static VkPhysicalDevice SelectBestVulkanPhysicalDevice(VkInstance vkInstance) {
-    // Enumerate available physical devices
-    uint32_t deviceCount = 0;
-    VkResult result = vkEnumeratePhysicalDevices(vkInstance, &deviceCount, nullptr);
-    if (result != VK_SUCCESS || deviceCount == 0) {
-        return VK_NULL_HANDLE;
-    }
-
-    // Get the physical devices
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    result = vkEnumeratePhysicalDevices(vkInstance, &deviceCount, devices.data());
-    if (result != VK_SUCCESS) {
-        return VK_NULL_HANDLE;
-    }
-
-    // Select the best physical device (prefer discrete GPU)
-    VkPhysicalDevice selectedDevice = devices[0];
-    VkPhysicalDeviceProperties selectedProps = {};
-    vkGetPhysicalDeviceProperties(selectedDevice, &selectedProps);
-
-    for (uint32_t i = 1; i < deviceCount; ++i) {
-        VkPhysicalDeviceProperties props = {};
-        vkGetPhysicalDeviceProperties(devices[i], &props);
-        if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-            selectedProps.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            selectedDevice = devices[i];
-            selectedProps = props;
-        }
-    }
-
-    return selectedDevice;
-}
-
-static XrResult SelectAndAssignVulkanPhysicalDevice(VkInstance vkInstance, VkPhysicalDevice* vkPhysicalDevice,
-                                                    const char* functionName) {
-    VkPhysicalDevice selectedDevice = SelectBestVulkanPhysicalDevice(vkInstance);
-    if (selectedDevice == VK_NULL_HANDLE) {
-        LOG_ERROR((std::string(functionName) + ": Failed to select physical device").c_str());
-        return XR_ERROR_RUNTIME_FAILURE;
-    }
-
-    VkPhysicalDeviceProperties selectedProps = {};
-    vkGetPhysicalDeviceProperties(selectedDevice, &selectedProps);
-
-    *vkPhysicalDevice = selectedDevice;
-    LOG_INFO((std::string(functionName) + ": Selected device: " + std::string(selectedProps.deviceName)).c_str());
-    return XR_SUCCESS;
-}
-
-XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsDeviceKHR(XrInstance instance, XrSystemId systemId,
-                                                            VkInstance vkInstance, VkPhysicalDevice* vkPhysicalDevice) {
-    LOG_DEBUG("xrGetVulkanGraphicsDeviceKHR called");
-    if (!vkPhysicalDevice) {
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-
-    if (!vkInstance) {
-        LOG_ERROR("xrGetVulkanGraphicsDeviceKHR: Vulkan instance is NULL");
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-
-    return SelectAndAssignVulkanPhysicalDevice(vkInstance, vkPhysicalDevice, "xrGetVulkanGraphicsDeviceKHR");
-}
-
-XRAPI_ATTR XrResult XRAPI_CALL xrGetVulkanGraphicsDevice2KHR(XrInstance instance,
-                                                             const XrVulkanGraphicsDeviceGetInfoKHR* getInfo,
-                                                             VkPhysicalDevice* vkPhysicalDevice) {
-    LOG_DEBUG("xrGetVulkanGraphicsDevice2KHR called");
-    if (!getInfo || !vkPhysicalDevice) {
-        LOG_ERROR("xrGetVulkanGraphicsDevice2KHR: Invalid parameters");
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-
-    if (!getInfo->vulkanInstance) {
-        LOG_ERROR("xrGetVulkanGraphicsDevice2KHR: Vulkan instance is NULL");
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-
-    return SelectAndAssignVulkanPhysicalDevice(getInfo->vulkanInstance, vkPhysicalDevice,
-                                               "xrGetVulkanGraphicsDevice2KHR");
-}
-
-XRAPI_ATTR XrResult XRAPI_CALL xrCreateVulkanInstanceKHR(XrInstance instance,
-                                                         const XrVulkanInstanceCreateInfoKHR* createInfo,
-                                                         VkInstance* vkInstance, VkResult* vkResult) {
-    LOG_DEBUG("xrCreateVulkanInstanceKHR called");
-    if (!createInfo || !vkInstance || !vkResult) {
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-
-    // Use the provided vkCreateInstance function pointer to create the Vulkan instance
-    PFN_vkCreateInstance vkCreateInstance =
-        (PFN_vkCreateInstance)createInfo->pfnGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance");
-    if (!vkCreateInstance) {
-        LOG_ERROR("xrCreateVulkanInstanceKHR: Failed to get vkCreateInstance function");
-        *vkResult = VK_ERROR_INITIALIZATION_FAILED;
-        return XR_ERROR_RUNTIME_FAILURE;
-    }
-
-    // Call vkCreateInstance with the provided create info
-    *vkResult = vkCreateInstance(createInfo->vulkanCreateInfo, createInfo->vulkanAllocator, vkInstance);
-    if (*vkResult != VK_SUCCESS) {
-        LOG_ERROR(
-            ("xrCreateVulkanInstanceKHR: vkCreateInstance failed with result " + std::to_string(*vkResult)).c_str());
-        return XR_ERROR_RUNTIME_FAILURE;
-    }
-
-    LOG_INFO("xrCreateVulkanInstanceKHR: Successfully created Vulkan instance");
-    return XR_SUCCESS;
-}
-
-XRAPI_ATTR XrResult XRAPI_CALL xrCreateVulkanDeviceKHR(XrInstance instance,
-                                                       const XrVulkanDeviceCreateInfoKHR* createInfo,
-                                                       VkDevice* vkDevice, VkResult* vkResult) {
-    LOG_DEBUG("xrCreateVulkanDeviceKHR called");
-    if (!createInfo || !vkDevice || !vkResult) {
-        return XR_ERROR_VALIDATION_FAILURE;
-    }
-
-    // Use the provided vkCreateDevice function pointer to create the Vulkan device
-    PFN_vkCreateDevice vkCreateDevice =
-        (PFN_vkCreateDevice)createInfo->pfnGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateDevice");
-
-    // If that doesn't work, use the globally linked vkCreateDevice
-    if (!vkCreateDevice) {
-        vkCreateDevice = ::vkCreateDevice;
-    }
-
-    if (!vkCreateDevice) {
-        LOG_ERROR("xrCreateVulkanDeviceKHR: Failed to get vkCreateDevice function");
-        *vkResult = VK_ERROR_INITIALIZATION_FAILED;
-        return XR_ERROR_RUNTIME_FAILURE;
-    }
-
-    // Call vkCreateDevice with the provided create info
-    *vkResult = vkCreateDevice(createInfo->vulkanPhysicalDevice, createInfo->vulkanCreateInfo,
-                               createInfo->vulkanAllocator, vkDevice);
-    if (*vkResult != VK_SUCCESS) {
-        LOG_ERROR(("xrCreateVulkanDeviceKHR: vkCreateDevice failed with result " + std::to_string(*vkResult)).c_str());
-        return XR_ERROR_RUNTIME_FAILURE;
-    }
-
-    LOG_INFO("xrCreateVulkanDeviceKHR: Successfully created Vulkan device");
-    return XR_SUCCESS;
-}
-#endif
-
 // Function map initialization
 static void InitializeFunctionMap() {
     g_clientFunctionMap["xrEnumerateApiLayerProperties"] =
@@ -2586,27 +1971,29 @@ static void InitializeFunctionMap() {
     g_clientFunctionMap["xrPathToString"] = reinterpret_cast<PFN_xrVoidFunction>(xrPathToString);
 #ifdef OX_OPENGL
     g_clientFunctionMap["xrGetOpenGLGraphicsRequirementsKHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetOpenGLGraphicsRequirementsKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(opengl::xrGetOpenGLGraphicsRequirementsKHR);
 #endif
 #ifdef OX_VULKAN
     g_clientFunctionMap["xrGetVulkanGraphicsRequirementsKHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanGraphicsRequirementsKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrGetVulkanGraphicsRequirementsKHR);
     g_clientFunctionMap["xrGetVulkanGraphicsRequirements2KHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanGraphicsRequirements2KHR);
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrGetVulkanGraphicsRequirements2KHR);
     g_clientFunctionMap["xrGetVulkanInstanceExtensionsKHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanInstanceExtensionsKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrGetVulkanInstanceExtensionsKHR);
     g_clientFunctionMap["xrGetVulkanDeviceExtensionsKHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanDeviceExtensionsKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrGetVulkanDeviceExtensionsKHR);
     g_clientFunctionMap["xrGetVulkanGraphicsDeviceKHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanGraphicsDeviceKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrGetVulkanGraphicsDeviceKHR);
     g_clientFunctionMap["xrGetVulkanGraphicsDevice2KHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetVulkanGraphicsDevice2KHR);
-    g_clientFunctionMap["xrCreateVulkanInstanceKHR"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateVulkanInstanceKHR);
-    g_clientFunctionMap["xrCreateVulkanDeviceKHR"] = reinterpret_cast<PFN_xrVoidFunction>(xrCreateVulkanDeviceKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrGetVulkanGraphicsDevice2KHR);
+    g_clientFunctionMap["xrCreateVulkanInstanceKHR"] =
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrCreateVulkanInstanceKHR);
+    g_clientFunctionMap["xrCreateVulkanDeviceKHR"] =
+        reinterpret_cast<PFN_xrVoidFunction>(vulkan::xrCreateVulkanDeviceKHR);
 #endif
 #ifdef OX_METAL
     g_clientFunctionMap["xrGetMetalGraphicsRequirementsKHR"] =
-        reinterpret_cast<PFN_xrVoidFunction>(xrGetMetalGraphicsRequirementsKHR);
+        reinterpret_cast<PFN_xrVoidFunction>(metal::xrGetMetalGraphicsRequirementsKHR);
 #endif
     g_clientFunctionMap["xrEnumerateViveTrackerPathsHTCX"] =
         reinterpret_cast<PFN_xrVoidFunction>(xrEnumerateViveTrackerPathsHTCX);
