@@ -14,11 +14,6 @@
 #define XR_KHR_metal_enable 1
 #include <Metal/Metal.h>
 #include <openxr/openxr_platform.h>
-
-// Declare Metal extension functions
-extern "C" {
-XRAPI_ATTR XrResult XRAPI_CALL xrGetMetalGraphicsRequirementsKHR(XrInstance instance, XrSystemId systemId, XrGraphicsRequirementsMetalKHR* graphicsRequirements);
-}
 #endif
 
 using namespace ox::test;
@@ -47,6 +42,13 @@ TEST_F(RuntimeTestBase, MetalGraphics_GetRequirements_ReturnsSuccess) {
     ASSERT_NE(instance, XR_NULL_HANDLE);
     created_instances_.push_back(instance);
 
+    // Get the Metal graphics requirements function
+    PFN_xrGetMetalGraphicsRequirementsKHR pfnGetMetalGraphicsRequirementsKHR = nullptr;
+    result = xrGetInstanceProcAddr(instance, "xrGetMetalGraphicsRequirementsKHR",
+                                   reinterpret_cast<PFN_xrVoidFunction*>(&pfnGetMetalGraphicsRequirementsKHR));
+    ASSERT_EQ(result, XR_SUCCESS);
+    ASSERT_NE(pfnGetMetalGraphicsRequirementsKHR, nullptr);
+
     XrSystemGetInfo system_info{XR_TYPE_SYSTEM_GET_INFO};
     system_info.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
 
@@ -55,7 +57,7 @@ TEST_F(RuntimeTestBase, MetalGraphics_GetRequirements_ReturnsSuccess) {
     ASSERT_EQ(result, XR_SUCCESS);
 
     XrGraphicsRequirementsMetalKHR metal_reqs{XR_TYPE_GRAPHICS_REQUIREMENTS_METAL_KHR};
-    result = xrGetMetalGraphicsRequirementsKHR(instance, system_id, &metal_reqs);
+    result = pfnGetMetalGraphicsRequirementsKHR(instance, system_id, &metal_reqs);
 
     EXPECT_EQ(result, XR_SUCCESS);
     // Metal device should be returned
