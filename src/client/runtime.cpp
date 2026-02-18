@@ -165,13 +165,14 @@ static std::unordered_map<std::string, XrPath> g_string_to_path;
 static std::unordered_map<std::string, int> g_device_path_to_index;
 static bool g_device_map_built = false;
 
-// Action binding metadata - maps binding path to action
-struct BindingData {
-    XrAction action;
+// Action binding metadata - maps action to its bindings
+struct ActionBinding {
+    XrPath binding_path;           // The full binding path (e.g., /user/hand/left/input/trigger/value)
     XrPath subaction_path;         // Which hand (left/right) or XR_NULL_PATH for no subaction
     std::vector<XrPath> profiles;  // List of profiles that use this binding
 };
-static std::unordered_map<XrPath, BindingData> g_bindings;
+// Map from action handle to list of its bindings
+static std::unordered_map<XrAction, std::vector<ActionBinding>> g_action_bindings;
 
 // Interaction profile tracking
 static XrPath g_current_interaction_profile = XR_NULL_PATH;
@@ -256,22 +257,18 @@ inline XrResult GetInstanceFromSession(XrSession session, XrInstance* instance) 
     return XR_SUCCESS;
 }
 
-// Helper: Check if a binding matches the action, profile, and subaction
-inline bool IsBindingMatch(const BindingData& binding_data, XrAction action, XrPath subaction_path) {
-    if (binding_data.action != action) {
-        return false;
-    }
-
+// Helper: Check if a binding matches the profile and subaction
+inline bool IsBindingMatch(const ActionBinding& binding, XrPath subaction_path) {
     // Check if subaction path matches (or no subaction requested)
-    if (subaction_path != XR_NULL_PATH && binding_data.subaction_path != XR_NULL_PATH &&
-        binding_data.subaction_path != subaction_path) {
+    if (subaction_path != XR_NULL_PATH && binding.subaction_path != XR_NULL_PATH &&
+        binding.subaction_path != subaction_path) {
         return false;
     }
 
     // Check if binding belongs to current interaction profile
     if (g_current_interaction_profile != XR_NULL_PATH) {
         bool profile_match = false;
-        for (const auto& profile : binding_data.profiles) {
+        for (const auto& profile : binding.profiles) {
             if (profile == g_current_interaction_profile) {
                 profile_match = true;
                 break;
@@ -305,14 +302,22 @@ inline XrResult GetActionState(XrSession session, const XrActionStateGetInfo* ge
         return XR_SUCCESS;
     }
 
-    for (const auto& [binding_path, binding_data] : g_bindings) {
-        if (!IsBindingMatch(binding_data, getInfo->action, getInfo->subactionPath)) {
+    // Look up bindings for this specific action
+    auto bindings_it = g_action_bindings.find(getInfo->action);
+    if (bindings_it == g_action_bindings.end()) {
+        // No bindings for this action
+        return XR_SUCCESS;
+    }
+
+    // Check each binding for this action
+    for (const auto& binding : bindings_it->second) {
+        if (!IsBindingMatch(binding, getInfo->subactionPath)) {
             continue;
         }
 
         char binding_path_str[256];
         uint32_t len = 0;
-        xrPathToString(instance, binding_path, sizeof(binding_path_str), &len, binding_path_str);
+        xrPathToString(instance, binding.binding_path, sizeof(binding_path_str), &len, binding_path_str);
 
         std::string path_str(binding_path_str);
         std::string user_path = ExtractUserPath(path_str);
@@ -1311,9 +1316,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
             XrPath subaction_path = XR_NULL_PATH;
             auto action_it = g_actions.find(binding.action);
             if (action_it != g_actions.end()) {
-                // For actions with subaction paths, we need to extract it from the binding path
-                // The binding path format is /user/hand/{left|right}/input/...
-                // We'll store all bindings and determine subaction at query time
+                // For actions with subaction paths, extract from the binding path
                 if (!action_it->second.subaction_paths.empty()) {
                     char binding_path_str[256];
                     uint32_t len = 0;
@@ -1330,25 +1333,34 @@ XRAPI_ATTR XrResult XRAPI_CALL xrSuggestInteractionProfileBindings(
                 }
             }
 
-            auto it = g_bindings.find(binding_path);
-            if (it != g_bindings.end()) {
-                // Check if we need to add this profile
-                bool profile_exists = false;
-                for (const auto& profile : it->second.profiles) {
-                    if (profile == suggestedBindings->interactionProfile) {
-                        profile_exists = true;
-                        break;
+            // Get or create bindings list for this action
+            auto& bindings_list = g_action_bindings[binding.action];
+
+            // Check if this binding path already exists for this action
+            bool found = false;
+            for (auto& action_binding : bindings_list) {
+                if (action_binding.binding_path == binding_path) {
+                    // Update existing binding: add profile if not already present
+                    bool profile_exists = false;
+                    for (const auto& profile : action_binding.profiles) {
+                        if (profile == suggestedBindings->interactionProfile) {
+                            profile_exists = true;
+                            break;
+                        }
                     }
+                    if (!profile_exists) {
+                        action_binding.profiles.push_back(suggestedBindings->interactionProfile);
+                    }
+                    action_binding.subaction_path = subaction_path;
+                    found = true;
+                    break;
                 }
-                if (!profile_exists) {
-                    it->second.profiles.push_back(suggestedBindings->interactionProfile);
-                }
-                // Update action/subaction just in case
-                it->second.action = binding.action;
-                it->second.subaction_path = subaction_path;
-            } else {
-                g_bindings[binding_path] =
-                    BindingData{binding.action, subaction_path, {suggestedBindings->interactionProfile}};
+            }
+
+            if (!found) {
+                // Add new binding for this action
+                bindings_list.push_back(
+                    ActionBinding{binding_path, subaction_path, {suggestedBindings->interactionProfile}});
             }
         }
     }
