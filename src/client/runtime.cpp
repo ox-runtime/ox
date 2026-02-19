@@ -148,6 +148,13 @@ struct ActionSpaceData {
 };
 static std::unordered_map<XrSpace, ActionSpaceData> g_action_spaces;
 
+// Reference space metadata
+struct ReferenceSpaceData {
+    XrReferenceSpaceType type;
+    XrPosef pose_in_reference_space;
+};
+static std::unordered_map<XrSpace, ReferenceSpaceData> g_reference_spaces;
+
 // Action metadata
 struct ActionData {
     XrActionType type;
@@ -940,6 +947,13 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateReferenceSpace(XrSession session, const X
     }
     XrSpace newSpace = reinterpret_cast<XrSpace>(handle);
     g_spaces[newSpace] = session;
+
+    // Store reference space metadata
+    ReferenceSpaceData space_data;
+    space_data.type = createInfo->referenceSpaceType;
+    space_data.pose_in_reference_space = createInfo->poseInReferenceSpace;
+    g_reference_spaces[newSpace] = space_data;
+
     *space = newSpace;
 
     return XR_SUCCESS;
@@ -949,6 +963,8 @@ XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpace(XrSpace space) {
     LOG_DEBUG("xrDestroySpace called");
     std::lock_guard<std::mutex> lock(g_instance_mutex);
     g_spaces.erase(space);
+    g_reference_spaces.erase(space);
+    g_action_spaces.erase(space);
     return XR_SUCCESS;
 }
 
@@ -1009,7 +1025,32 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
         return XR_SUCCESS;
     }
 
-    // Regular reference space
+    // Check if this is a VIEW reference space - return actual headset pose from simulator
+    auto ref_it = g_reference_spaces.find(space);
+    if (ref_it != g_reference_spaces.end() && ref_it->second.type == XR_REFERENCE_SPACE_TYPE_VIEW) {
+        auto* shared_data = g_service_connection->GetSharedData();
+        if (shared_data && shared_data->frame_state.view_count.load(std::memory_order_acquire) >= 2) {
+            // Calculate center between left and right eye poses
+            auto& left_eye = shared_data->frame_state.views[0].pose.pose;
+            auto& right_eye = shared_data->frame_state.views[1].pose.pose;
+
+            location->locationFlags = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
+                                      XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT |
+                                      XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
+
+            // Average position between eyes
+            location->pose.position.x = (left_eye.position.x + right_eye.position.x) * 0.5f;
+            location->pose.position.y = (left_eye.position.y + right_eye.position.y) * 0.5f;
+            location->pose.position.z = (left_eye.position.z + right_eye.position.z) * 0.5f;
+
+            // Use left eye orientation (both eyes should have same orientation)
+            location->pose.orientation = left_eye.orientation;
+
+            return XR_SUCCESS;
+        }
+    }
+
+    // Regular reference space (LOCAL, STAGE) - return identity pose
     location->locationFlags = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT |
                               XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT | XR_SPACE_LOCATION_POSITION_TRACKED_BIT;
     location->pose.orientation.x = 0.0f;
@@ -1017,7 +1058,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrLocateSpace(XrSpace space, XrSpace baseSpace, X
     location->pose.orientation.z = 0.0f;
     location->pose.orientation.w = 1.0f;
     location->pose.position.x = 0.0f;
-    location->pose.position.y = 1.6f;  // Eye height
+    location->pose.position.y = 0.0f;
     location->pose.position.z = 0.0f;
 
     return XR_SUCCESS;
