@@ -41,7 +41,7 @@ class MockServiceConnection : public client::IServiceConnection {
         shared_data_.protocol_version.store(ox::protocol::PROTOCOL_VERSION);
         shared_data_.service_ready.store(1);
         shared_data_.client_connected.store(1);
-        shared_data_.session_state.store(static_cast<uint32_t>(ox::protocol::SessionState::READY));
+        shared_data_.session_state.store(static_cast<uint32_t>(XR_SESSION_STATE_READY));
         shared_data_.active_session_handle.store(1000);
 
         // Default connection behavior

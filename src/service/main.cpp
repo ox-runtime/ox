@@ -67,7 +67,7 @@ class OxService {
         InitializeViewConfigurations();
 
         // Initialize session state (dynamic)
-        shared_data_->session_state.store(static_cast<uint32_t>(SessionState::IDLE), std::memory_order_release);
+        shared_data_->session_state.store(static_cast<uint32_t>(XR_SESSION_STATE_IDLE), std::memory_order_release);
         shared_data_->active_session_handle.store(0, std::memory_order_release);
 
         // Create control channel
@@ -256,8 +256,9 @@ class OxService {
         allocated_handles_.erase(handle);
     }
 
-    void TransitionSessionState(SessionState new_state) {
-        SessionState old_state = static_cast<SessionState>(shared_data_->session_state.load(std::memory_order_acquire));
+    void TransitionSessionState(XrSessionState new_state) {
+        XrSessionState old_state =
+            static_cast<XrSessionState>(shared_data_->session_state.load(std::memory_order_acquire));
 
         if (old_state != new_state) {
             shared_data_->session_state.store(static_cast<uint32_t>(new_state), std::memory_order_release);
@@ -359,15 +360,15 @@ class OxService {
         shared_data_->active_session_handle.store(session_handle, std::memory_order_release);
 
         // Transition to READY state
-        TransitionSessionState(SessionState::READY);
+        TransitionSessionState(XR_SESSION_STATE_READY);
 
         // After a brief moment, transition to SYNCHRONIZED then FOCUSED
         // (In a real implementation, this would be based on actual hardware state)
         std::thread([this]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            TransitionSessionState(SessionState::SYNCHRONIZED);
+            TransitionSessionState(XR_SESSION_STATE_SYNCHRONIZED);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            TransitionSessionState(SessionState::FOCUSED);
+            TransitionSessionState(XR_SESSION_STATE_FOCUSED);
         }).detach();
 
         // Send response with session handle
@@ -390,7 +391,7 @@ class OxService {
             shared_data_->active_session_handle.store(0, std::memory_order_release);
         }
 
-        TransitionSessionState(SessionState::IDLE);
+        TransitionSessionState(XR_SESSION_STATE_IDLE);
 
         MessageHeader response;
         response.type = MessageType::RESPONSE;
@@ -415,12 +416,12 @@ class OxService {
         }
 
         // Transition to STOPPING state
-        TransitionSessionState(SessionState::STOPPING);
+        TransitionSessionState(XR_SESSION_STATE_STOPPING);
 
         // After a brief moment, transition to EXITING
         std::thread([this]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            TransitionSessionState(SessionState::EXITING);
+            TransitionSessionState(XR_SESSION_STATE_EXITING);
         }).detach();
 
         MessageHeader response;

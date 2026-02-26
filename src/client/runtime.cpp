@@ -515,37 +515,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffe
         stateEvent->next = nullptr;
         stateEvent->session = reinterpret_cast<XrSession>(service_event.session_handle);
         stateEvent->time = service_event.timestamp;
-
-        // Convert service SessionState to XrSessionState
-        switch (service_event.state) {
-            case SessionState::IDLE:
-                stateEvent->state = XR_SESSION_STATE_IDLE;
-                break;
-            case SessionState::READY:
-                stateEvent->state = XR_SESSION_STATE_READY;
-                break;
-            case SessionState::SYNCHRONIZED:
-                stateEvent->state = XR_SESSION_STATE_SYNCHRONIZED;
-                break;
-            case SessionState::VISIBLE:
-                stateEvent->state = XR_SESSION_STATE_VISIBLE;
-                break;
-            case SessionState::FOCUSED:
-                stateEvent->state = XR_SESSION_STATE_FOCUSED;
-                break;
-            case SessionState::STOPPING:
-                stateEvent->state = XR_SESSION_STATE_STOPPING;
-                break;
-            case SessionState::LOSS_PENDING:
-                stateEvent->state = XR_SESSION_STATE_LOSS_PENDING;
-                break;
-            case SessionState::EXITING:
-                stateEvent->state = XR_SESSION_STATE_EXITING;
-                break;
-            default:
-                stateEvent->state = XR_SESSION_STATE_UNKNOWN;
-                break;
-        }
+        stateEvent->state = service_event.state;
 
         LOG_INFO("Session state event from service");
         return XR_SUCCESS;

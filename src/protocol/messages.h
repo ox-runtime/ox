@@ -49,19 +49,6 @@ enum class HandleType : uint32_t {
     SWAPCHAIN = 6,
 };
 
-// Session states
-enum class SessionState : uint32_t {
-    UNKNOWN = 0,
-    IDLE = 1,
-    READY = 2,
-    SYNCHRONIZED = 3,
-    VISIBLE = 4,
-    FOCUSED = 5,
-    STOPPING = 6,
-    LOSS_PENDING = 7,
-    EXITING = 8,
-};
-
 // Status codes for protocol messages
 enum MessageStatus : uint32_t {
     OK = 0,
@@ -92,7 +79,7 @@ struct RequestExitSessionRequest {
 
 struct SessionStateEvent {
     uint64_t session_handle;
-    SessionState state;
+    XrSessionState state;
     uint64_t timestamp;
 };
 
