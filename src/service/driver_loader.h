@@ -214,6 +214,12 @@ class DriverLoader {
         }
     }
 
+    void NotifySessionState(OxSessionState state) const {
+        if (loaded_ && callbacks_.on_session_state_changed) {
+            callbacks_.on_session_state_changed(state);
+        }
+    }
+
     bool IsLoaded() const { return loaded_; }
 
    private:

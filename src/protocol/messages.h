@@ -58,7 +58,8 @@ enum class SessionState : uint32_t {
     VISIBLE = 4,
     FOCUSED = 5,
     STOPPING = 6,
-    EXITING = 7,
+    LOSS_PENDING = 7,
+    EXITING = 8,
 };
 
 // Status codes for protocol messages

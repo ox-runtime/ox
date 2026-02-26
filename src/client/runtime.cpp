@@ -536,6 +536,9 @@ XRAPI_ATTR XrResult XRAPI_CALL xrPollEvent(XrInstance instance, XrEventDataBuffe
             case SessionState::STOPPING:
                 stateEvent->state = XR_SESSION_STATE_STOPPING;
                 break;
+            case SessionState::LOSS_PENDING:
+                stateEvent->state = XR_SESSION_STATE_LOSS_PENDING;
+                break;
             case SessionState::EXITING:
                 stateEvent->state = XR_SESSION_STATE_EXITING;
                 break;

@@ -274,6 +274,9 @@ class OxService {
             std::lock_guard<std::mutex> lock(event_mutex_);
             pending_events_.push_back(event);
 
+            // Notify the driver
+            driver_.NotifySessionState(static_cast<OxSessionState>(static_cast<uint32_t>(new_state)));
+
             LOG_INFO("Session state transition");
         }
     }
@@ -691,6 +694,9 @@ class OxService {
 
                 // Check if texture is ready
                 if (texture.ready.load(std::memory_order_acquire) == 1) {
+                    // Mark consumed so we only submit once per frame
+                    texture.ready.store(0, std::memory_order_release);
+
                     uint32_t width = texture.width.load(std::memory_order_relaxed);
                     uint32_t height = texture.height.load(std::memory_order_relaxed);
                     uint32_t format = texture.format.load(std::memory_order_relaxed);

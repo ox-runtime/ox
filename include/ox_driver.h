@@ -87,6 +87,20 @@ typedef enum {
     OX_COMPONENT_AVAILABLE = 1,    // Component exists and state is valid
 } OxComponentResult;
 
+// Session states
+typedef enum {
+    OX_SESSION_STATE_UNKNOWN = 0,       // No session / undefined
+    OX_SESSION_STATE_IDLE = 1,          // Session is idle (no app running or app hasn't started)
+    OX_SESSION_STATE_READY = 2,         // Runtime is ready; app should call xrBeginSession
+    OX_SESSION_STATE_SYNCHRONIZED = 3,  // Session is synchronized but not yet visible
+    OX_SESSION_STATE_VISIBLE = 4,       // App frames are visible to the user
+    OX_SESSION_STATE_FOCUSED = 5,       // App has input focus (fully active)
+    OX_SESSION_STATE_STOPPING = 6,      // App should call xrEndSession soon
+    OX_SESSION_STATE_LOSS_PENDING = 7,  // Runtime is no longer able to operate with the current session, for example
+                                        // due to the loss of a display hardware connection
+    OX_SESSION_STATE_EXITING = 8,       // App should call xrDestroySession / exit
+} OxSessionState;
+
 // Driver callbacks - implement these in your driver
 struct OxDriverCallbacks {
     // ========== Lifecycle ==========
@@ -172,6 +186,13 @@ struct OxDriverCallbacks {
     // Example profile: "/interaction_profiles/khr/simple_controller"
     // This callback is optional - if NULL, driver supports /interaction_profiles/khr/simple_controller by default
     uint32_t (*get_interaction_profiles)(const char** profiles, uint32_t max_profiles);
+
+    // ========== Session Lifecycle (Optional) ==========
+
+    // Called whenever the OpenXR session state changes.
+    // Delivers the same state progression an XR app sees via XrEventDataSessionStateChanged.
+    // This callback is optional - set to NULL if not needed.
+    void (*on_session_state_changed)(OxSessionState new_state);
 
     // ========== Frame Submission (Optional) ==========
 
