@@ -131,10 +131,9 @@ void DestroyTextures(void** textures, uint32_t numTextures) {
 }
 
 std::vector<int64_t> GetSupportedFormats() {
+    // Report only sRGB formats so applications apply sRGB color management.
     return {
-        static_cast<int64_t>(MTLPixelFormatRGBA8Unorm),
         static_cast<int64_t>(MTLPixelFormatRGBA8Unorm_sRGB),
-        static_cast<int64_t>(MTLPixelFormatBGRA8Unorm),
         static_cast<int64_t>(MTLPixelFormatBGRA8Unorm_sRGB),
     };
 }

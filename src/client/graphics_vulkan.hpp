@@ -291,10 +291,10 @@ bool CopyImageToMemory(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue
 }
 
 std::vector<int64_t> GetSupportedFormats() {
+    // Report only sRGB formats so applications apply sRGB color management.
     return {
         static_cast<int64_t>(VK_FORMAT_R8G8B8A8_SRGB),
         static_cast<int64_t>(VK_FORMAT_B8G8R8A8_SRGB),
-        static_cast<int64_t>(VK_FORMAT_R8G8B8A8_UNORM),
     };
 }
 

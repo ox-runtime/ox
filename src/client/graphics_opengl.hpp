@@ -7,6 +7,11 @@
 
 #include "../logging.h"
 
+// GL_SRGB8_ALPHA8 is not defined in the base Windows GL/gl.h
+#ifndef GL_SRGB8_ALPHA8
+#define GL_SRGB8_ALPHA8 0x8C43
+#endif
+
 namespace ox {
 namespace client {
 namespace opengl {
@@ -69,9 +74,9 @@ bool CopyTextureToMemory(uint32_t textureId, uint32_t width, uint32_t height, st
 }
 
 std::vector<int64_t> GetSupportedFormats() {
+    // Report only sRGB formats so applications apply sRGB color management.
     return {
-        static_cast<int64_t>(GL_RGBA),
-        static_cast<int64_t>(GL_RGBA8),
+        static_cast<int64_t>(GL_SRGB8_ALPHA8),
     };
 }
 
