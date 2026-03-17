@@ -1,5 +1,5 @@
 # Run using `blender --python test_blender_restart.py`
-# Remember to set XR_RUNTIME_JSON="/path/to/ox_openxr.json" before running blender
+# Remember to set XR_RUNTIME_JSON="/path/to/ox_runtime.json" before running blender
 
 import bpy
 

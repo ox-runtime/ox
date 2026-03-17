@@ -6,26 +6,38 @@
 
 The primary purpose of **ox** is automated testing of OpenXR applications. It comes with a [virtual OpenXR device](https://github.com/ox-runtime/ox-simulator) which can be controlled programmatically (e.g. press a button, move the headset etc). The effect of these actions can then be verified in the OpenXR application that you're testing.
 
-## Building
+## Code
+
+The code is organized into multiple repositories:
+- [ox](https://github.com/ox-runtime/ox) (this repo): the host executable and CMake build orchestration
+- [ox-sim-driver](https://github.com/ox-runtime/ox-sim-driver): the simulator GUI and C API for controlling the virtual device programmatically
+- [ox-runtime](https://github.com/ox-runtime/ox-runtime): the OpenXR runtime implementation
+- [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): a shared library that both the runtime and simulator driver depend on for IPC communication
+
+## Build
 
 ```bash
-# Build the runtime
 cmake -B build
 cmake --build build --config Release
-
-# Quick test (requires https://github.com/cmbruns/pyopenxr_examples)
-export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json
-python pyopenxr_examples/xr_examples/runtime_name.py
 ```
 
-Expected output:
+By default, the top-level CMake build fetches those repos with `FetchContent`. To work against local repo clones instead, pass any of these build-time flags:
+
+- `OX_RUNTIME_REPO_PATH`
+- `OX_IPC_PROXY_REPO_PATH`
+- `OX_SIM_DRIVER_REPO_PATH`
+
+For e.g. to build against local clones of all three repos:
+
 ```bash
-The current active OpenXR runtime is: ox
+cmake -B build \
+	-DOX_RUNTIME_REPO_PATH=/path/to/ox-runtime \
+	-DOX_IPC_PROXY_REPO_PATH=/path/to/ox-ipc-proxy \
+	-DOX_SIM_DRIVER_REPO_PATH=/path/to/ox-sim-driver
+cmake --build build --target ox --config Release
 ```
 
-The build produces (in `./build/bin/`):
-- **Windows**: `ox_runtime.dll` and `ox_openxr.json`
-- **Linux**: `libox_runtime.so` and `ox_openxr.json`
+The build will be produced in `./build/bin/`.
 
 ## Using the Runtime
 
@@ -42,17 +54,6 @@ export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json
 ```
 
 Then run any OpenXR application.
-
-## Troubleshooting
-
-**"XR_ERROR_RUNTIME_UNAVAILABLE"**
-- Check that `XR_RUNTIME_JSON` environment variable is set correctly
-- Verify the manifest file exists at `build/bin/ox_openxr.json`
-- Ensure the runtime library is in the same directory as the manifest
-
-**Build errors on Linux**
-- Make sure you have OpenGL and Vulkan development headers installed
-- Install: `sudo apt-get install libgl1-mesa-dev libx11-dev libvulkan-dev`
 
 ## References
 

@@ -44,28 +44,6 @@ jobs:
           ./build/bin/tests/runtime/runtime_tests
         fi
 
-    - name: Download ox-simulator
-      shell: bash
-      run: |
-        PLATFORM="linux-x64"
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          PLATFORM="win-x64"
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          PLATFORM="mac-arm64"
-        fi
-        RELEASE_URL="https://github.com/ox-runtime/ox-simulator/releases/latest/download"
-        curl -L -o ox-simulator.zip "$RELEASE_URL/ox-simulator-driver-only-${PLATFORM}.zip"
-
-    - name: Unzip ox-simulator
-      shell: bash
-      run: |
-        mkdir -p build/bin/drivers
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          powershell -Command "Expand-Archive -Path ox-simulator.zip -DestinationPath build/bin/drivers/"
-        else
-          unzip ox-simulator.zip -d build/bin/drivers/
-        fi
-
     - name: Create zip
       shell: bash
       run: |

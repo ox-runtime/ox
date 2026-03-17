@@ -1,223 +1,129 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.14)
+
 project(ox VERSION 0.5.0 LANGUAGES CXX)
 
-include(FetchContent)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.14)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Enable testing
-enable_testing()
+include(FetchContent)
 
-# Set default build type if not specified
+set(OX_RUNTIME_REPO "" CACHE PATH "Local path to ox-runtime; uses FetchContent when empty")
+set(OX_SIM_DRIVER_REPO "" CACHE PATH "Local path to ox-sim-driver; uses FetchContent when empty")
+set(OX_IPC_PROXY_REPO "" CACHE PATH "Local path to ox-ipc-proxy; uses FetchContent when empty")
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-# Ensure NDEBUG is defined for Release builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     add_compile_definitions(NDEBUG)
 endif()
 
-# Use static runtime library (/MT) on Windows for better compatibility
 if(WIN32 AND MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-# Graphics API options with platform-specific defaults
-if(APPLE)
-    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
-    option(OX_VULKAN "Enable Vulkan graphics API support" OFF)
-    option(OX_METAL "Enable Metal graphics API support on macOS" ON)
-else()
-    option(OX_OPENGL "Enable OpenGL graphics API support" ON)
-    option(OX_VULKAN "Enable Vulkan graphics API support" ON)
-    option(OX_METAL "Enable Metal graphics API support on macOS" OFF)
-endif()
-
-# Fetch OpenXR SDK
-FetchContent_Declare(
-    openxr
-    GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
-    GIT_TAG release-1.1.54
-)
-FetchContent_MakeAvailable(openxr)
-
-set(OPENXR_INCLUDE_DIR ${openxr_SOURCE_DIR}/include)
-message(STATUS "Using OpenXR SDK from FetchContent: ${openxr_SOURCE_DIR}")
-
-# Platform-specific link libraries
 if(WIN32)
-    set(SERVICE_LIBS)
+    set(OX_PLATFORM_LIBS)
 elseif(APPLE)
-    set(SERVICE_LIBS pthread)
+    set(OX_PLATFORM_LIBS pthread)
 else()
-    set(SERVICE_LIBS pthread rt dl)
+    set(OX_PLATFORM_LIBS pthread rt dl)
 endif()
 
-# Service executable
-add_executable(ox-service
-    src/service/main.cpp
-    src/logging.cpp
-)
+function(ox_add_component content_name repo_url local_repo)
+    if(local_repo)
+        get_filename_component(component_source_dir "${local_repo}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+        if(NOT EXISTS "${component_source_dir}/CMakeLists.txt")
+            message(FATAL_ERROR "${content_name} local repo path does not contain a CMakeLists.txt: ${component_source_dir}")
+        endif()
 
-target_include_directories(ox-service PRIVATE
-    ${OPENXR_INCLUDE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+        message(STATUS "Using local ${content_name} repository: ${component_source_dir}")
+        FetchContent_Declare(
+            ${content_name}
+            SOURCE_DIR "${component_source_dir}"
+        )
+    else()
+        message(STATUS "Fetching ${content_name} from ${repo_url}")
+        FetchContent_Declare(
+            ${content_name}
+            GIT_REPOSITORY "${repo_url}"
+            GIT_TAG main
+            GIT_SHALLOW TRUE
+        )
+    endif()
+
+    FetchContent_MakeAvailable(${content_name})
+endfunction()
+
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog
+    GIT_TAG v1.17.0
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(spdlog)
+
+ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "${OX_RUNTIME_REPO}")
+ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "${OX_IPC_PROXY_REPO}")
+ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "${OX_SIM_DRIVER_REPO}")
+
+add_executable(ox src/main.cpp)
+
+target_include_directories(ox PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(ox-service PRIVATE ${SERVICE_LIBS})
+target_link_libraries(ox PRIVATE
+    spdlog::spdlog
+    ${OX_PLATFORM_LIBS}
+)
 
-# Define version macros for the service
-target_compile_definitions(ox-service PRIVATE
+target_compile_definitions(ox PRIVATE
     OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
     OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
 
-set_target_properties(ox-service PROPERTIES
+set_target_properties(ox PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
     RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
 )
 
-# Client library (runtime DLL)
-set(OX_RUNTIME_SOURCES
-    src/client/runtime.cpp
-    src/client/service_connection.cpp
-    src/logging.cpp
-)
+add_dependencies(ox ox_runtime ox_ipc_frontend ox_ipc_backend ox-simulator)
 
-# Add Metal implementation for macOS
-if(APPLE AND OX_METAL)
-    set_source_files_properties(src/client/runtime.cpp PROPERTIES
-        COMPILE_FLAGS "-x objective-c++"
-    )
+get_target_property(OX_SIM_DRIVER_OUTPUT_DIR ox-simulator RUNTIME_OUTPUT_DIRECTORY)
+if(NOT OX_SIM_DRIVER_OUTPUT_DIR)
+    get_target_property(OX_SIM_DRIVER_OUTPUT_DIR ox-simulator LIBRARY_OUTPUT_DIRECTORY)
 endif()
 
-# Function to configure graphics APIs for a target
-function(configure_graphics target)
-    # Define graphics API support macros
-    if(OX_OPENGL)
-        target_compile_definitions(${target} PRIVATE OX_OPENGL=1)
-    endif()
-    if(OX_VULKAN)
-        target_compile_definitions(${target} PRIVATE OX_VULKAN=1)
-    endif()
-    if(OX_METAL)
-        target_compile_definitions(${target} PRIVATE OX_METAL=1)
-    endif()
-
-    # Link graphics libraries conditionally
-    if(OX_OPENGL)
-        find_package(OpenGL REQUIRED)
-        target_link_libraries(${target} PRIVATE OpenGL::GL)
-    endif()
-
-    if(OX_VULKAN)
-        find_package(Vulkan REQUIRED)
-        target_link_libraries(${target} PRIVATE Vulkan::Vulkan)
-        target_include_directories(${target} PRIVATE ${Vulkan_INCLUDE_DIRS})
-    endif()
-
-    # Add Metal framework for macOS
-    if(APPLE AND OX_METAL)
-        find_library(METAL_LIBRARY Metal REQUIRED)
-        find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)
-        find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
-        target_link_libraries(${target} PRIVATE ${METAL_LIBRARY} ${QUARTZCORE_LIBRARY} ${COREFOUNDATION_LIBRARY})
-    endif()
-endfunction()
-
-add_library(ox_runtime SHARED ${OX_RUNTIME_SOURCES})
-
-target_include_directories(ox_runtime PRIVATE
-    ${OPENXR_INCLUDE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-# Define version macros and graphics API support for the runtime
-target_compile_definitions(ox_runtime PRIVATE
-    OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-    OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-    OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-)
-
-configure_graphics(ox_runtime)
-
-# Set output directory to build/bin (disable per-config subdirectories)
-set_target_properties(ox_runtime PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
-    # For Windows, ensure .lib import library is created
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib
-)
-
-# Platform-specific settings
-if(WIN32)
-    target_compile_definitions(ox_runtime PRIVATE
-        XR_USE_PLATFORM_WIN32
-    )
-    # Export symbols for Windows DLL
-    target_compile_definitions(ox_runtime PRIVATE
-        XR_RUNTIME_EXPORTS
-    )
-    set(RUNTIME_LIBRARY_NAME "ox_runtime.dll")
-    set(RUNTIME_LIBRARY_PATH "./ox_runtime.dll")
-elseif(APPLE)
-    target_compile_definitions(ox_runtime PRIVATE
-        XR_USE_PLATFORM_MACOS
-        GL_SILENCE_DEPRECATION
-    )
-    # For macOS, set the DYLIB versioning
-    set_target_properties(ox_runtime PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION 1
-    )
-    set(RUNTIME_LIBRARY_NAME "libox_runtime.dylib")
-    set(RUNTIME_LIBRARY_PATH "./libox_runtime.dylib")
-elseif(UNIX)
-    target_compile_definitions(ox_runtime PRIVATE
-        XR_USE_PLATFORM_XLIB
-    )
-    # For Linux, set the SONAME
-    set_target_properties(ox_runtime PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION 1
-    )
-    set(RUNTIME_LIBRARY_NAME "libox_runtime.so")
-    set(RUNTIME_LIBRARY_PATH "./libox_runtime.so")
+if(NOT OX_SIM_DRIVER_OUTPUT_DIR)
+    message(FATAL_ERROR "Could not determine the ox-sim-driver output directory")
 endif()
 
-# Generate the OpenXR runtime manifest JSON file
-set(MANIFEST_OUTPUT "${CMAKE_BINARY_DIR}/bin/ox_openxr.json")
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/ox_openxr.json.in"
-    "${MANIFEST_OUTPUT}"
-    @ONLY
+add_custom_command(TARGET ox POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ox>/drivers"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "$<TARGET_FILE_DIR:ox>/drivers/ox_simulator"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${OX_SIM_DRIVER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:ox>/drivers/ox_simulator"
+    VERBATIM
 )
 
-# Install the runtime library and service
-install(TARGETS ox_runtime ox-service
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
+add_custom_target(ox_bundle DEPENDS ox)
+
+install(TARGETS ox RUNTIME DESTINATION bin)
+
+set(MANIFEST_OUTPUT "${CMAKE_BINARY_DIR}/bin/ox_runtime.json")
 
 # Print build completion message
-add_custom_command(TARGET ox_runtime POST_BUILD
+add_custom_command(TARGET ox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "====================================================================="
     COMMAND ${CMAKE_COMMAND} -E echo "Build complete!"
     COMMAND ${CMAKE_COMMAND} -E echo ""
-    COMMAND ${CMAKE_COMMAND} -E echo "Runtime library: ${CMAKE_BINARY_DIR}/bin/${RUNTIME_LIBRARY_NAME}"
-    COMMAND ${CMAKE_COMMAND} -E echo "Service executable:     ${CMAKE_BINARY_DIR}/bin/ox-service${CMAKE_EXECUTABLE_SUFFIX}"
+    COMMAND ${CMAKE_COMMAND} -E echo "Service executable:     ${CMAKE_BINARY_DIR}/bin/ox${CMAKE_EXECUTABLE_SUFFIX}"
     COMMAND ${CMAKE_COMMAND} -E echo "Manifest file:   ${MANIFEST_OUTPUT}"
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "To use this runtime, set:"
@@ -225,20 +131,17 @@ add_custom_command(TARGET ox_runtime POST_BUILD
 )
 
 if(WIN32)
-    add_custom_command(TARGET ox_runtime POST_BUILD
+    add_custom_command(TARGET ox POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "  set XR_RUNTIME_JSON=${MANIFEST_OUTPUT}"
         COMMAND ${CMAKE_COMMAND} -E echo "====================================================================="
         COMMAND ${CMAKE_COMMAND} -E echo ""
         VERBATIM
     )
 else()
-    add_custom_command(TARGET ox_runtime POST_BUILD
+    add_custom_command(TARGET ox POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "  export XR_RUNTIME_JSON=\"${MANIFEST_OUTPUT}\""
         COMMAND ${CMAKE_COMMAND} -E echo "====================================================================="
         COMMAND ${CMAKE_COMMAND} -E echo ""
         VERBATIM
     )
 endif()
-
-# Add tests subdirectory
-add_subdirectory(tests)
