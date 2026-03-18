@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(ox VERSION 0.5.0 LANGUAGES CXX)
+project(ox VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,14 +10,6 @@ include(FetchContent)
 set(OX_RUNTIME_REPO "" CACHE PATH "Local path to ox-runtime; uses FetchContent when empty")
 set(OX_SIM_DRIVER_REPO "" CACHE PATH "Local path to ox-sim-driver; uses FetchContent when empty")
 set(OX_IPC_PROXY_REPO "" CACHE PATH "Local path to ox-ipc-proxy; uses FetchContent when empty")
-
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-endif()
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-    add_compile_definitions(NDEBUG)
-endif()
 
 if(WIN32 AND MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -64,6 +56,32 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+if(NOT TARGET dylib)
+    FetchContent_Declare(
+        dylib
+        GIT_REPOSITORY https://github.com/martin-olivier/dylib
+        GIT_TAG v3.0.1
+        GIT_SHALLOW true
+    )
+    FetchContent_MakeAvailable(dylib)
+endif()
+
+if(NOT TARGET whereami)
+    FetchContent_Declare(
+        whereami
+        GIT_REPOSITORY https://github.com/gpakosz/whereami.git
+        GIT_TAG master
+        GIT_SHALLOW true
+    )
+    FetchContent_MakeAvailable(whereami)
+
+    add_library(whereami STATIC ${whereami_SOURCE_DIR}/src/whereami.c)
+    target_include_directories(whereami PUBLIC ${whereami_SOURCE_DIR}/src)
+    if(CMAKE_DL_LIBS)
+        target_link_libraries(whereami PUBLIC ${CMAKE_DL_LIBS})
+    endif()
+endif()
+
 ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "${OX_RUNTIME_REPO}")
 ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "${OX_IPC_PROXY_REPO}")
 ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "${OX_SIM_DRIVER_REPO}")
@@ -72,10 +90,14 @@ add_executable(ox src/main.cpp)
 
 target_include_directories(ox PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${dylib_SOURCE_DIR}/include
+    ${whereami_SOURCE_DIR}/src
 )
 
 target_link_libraries(ox PRIVATE
     spdlog::spdlog
+    dylib
+    whereami
     ${OX_PLATFORM_LIBS}
 )
 
