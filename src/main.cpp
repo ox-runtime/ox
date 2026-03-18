@@ -14,24 +14,22 @@ namespace fs = std::filesystem;
 constexpr std::string_view kDriverLibraryStem = "ox_driver";
 constexpr std::string_view kBackendLibraryStem = "ox_ipc_backend";
 
-fs::path ExecutableDirectory() {
-    const int len = wai_getExecutablePath(nullptr, 0, nullptr);
-    if (len <= 0) {
-        return fs::current_path();
-    }
+fs::path GetCurrentDir() {
+    const int len = wai_getModulePath(nullptr, 0, nullptr);
+    assert(len > 0 && "Failed to get executable path");
+
     std::string buf(static_cast<size_t>(len) + 1, '\0');
-    if (wai_getExecutablePath(buf.data(), len, nullptr) != len) {
-        return fs::current_path();
-    }
+    wai_getModulePath(buf.data(), len, nullptr);
     buf[static_cast<size_t>(len)] = '\0';
+
     return fs::path(buf.c_str()).parent_path();
 }
 
 int main() {
-    const fs::path exe_dir = ExecutableDirectory();
+    const fs::path curr_dir = GetCurrentDir();
 
     // Find the single driver directory
-    const fs::path drivers_dir = exe_dir / "drivers";
+    const fs::path drivers_dir = curr_dir / "drivers";
     std::vector<fs::path> driver_dirs;
     for (const auto& entry : fs::directory_iterator(drivers_dir)) {
         if (entry.is_directory()) {
@@ -61,7 +59,7 @@ int main() {
     }
 
     // Load backend
-    dylib::library backend_lib((exe_dir / kBackendLibraryStem).string(), dylib::decorations::os_default());
+    dylib::library backend_lib((curr_dir / kBackendLibraryStem).string(), dylib::decorations::os_default());
     auto backend_set_driver = backend_lib.get_function<void(const OxDriverCallbacks*)>("set_driver");
     auto backend_initialize = backend_lib.get_function<int()>("initialize");
     auto backend_shutdown = backend_lib.get_function<void()>("shutdown");
