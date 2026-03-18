@@ -56,30 +56,26 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
-if(NOT TARGET dylib)
-    FetchContent_Declare(
-        dylib
-        GIT_REPOSITORY https://github.com/martin-olivier/dylib
-        GIT_TAG v3.0.1
-        GIT_SHALLOW true
-    )
-    FetchContent_MakeAvailable(dylib)
-endif()
+FetchContent_Declare(
+    dylib
+    GIT_REPOSITORY https://github.com/martin-olivier/dylib
+    GIT_TAG v3.0.1
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(dylib)
 
-if(NOT TARGET whereami)
-    FetchContent_Declare(
-        whereami
-        GIT_REPOSITORY https://github.com/gpakosz/whereami.git
-        GIT_TAG master
-        GIT_SHALLOW true
-    )
-    FetchContent_MakeAvailable(whereami)
+FetchContent_Declare(
+    whereami
+    GIT_REPOSITORY https://github.com/gpakosz/whereami.git
+    GIT_TAG master
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(whereami)
 
-    add_library(whereami STATIC ${whereami_SOURCE_DIR}/src/whereami.c)
-    target_include_directories(whereami PUBLIC ${whereami_SOURCE_DIR}/src)
-    if(CMAKE_DL_LIBS)
-        target_link_libraries(whereami PUBLIC ${CMAKE_DL_LIBS})
-    endif()
+add_library(whereami STATIC ${whereami_SOURCE_DIR}/src/whereami.c)
+target_include_directories(whereami PUBLIC ${whereami_SOURCE_DIR}/src)
+if(CMAKE_DL_LIBS)
+    target_link_libraries(whereami PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
 ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "${OX_RUNTIME_REPO}")
