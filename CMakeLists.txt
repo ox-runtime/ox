@@ -15,6 +15,11 @@ if(WIN32 AND MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+if(NOT WIN32)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    set(SPDLOG_BUILD_PIC ON CACHE BOOL "" FORCE)
+endif()
+
 if(WIN32)
     set(OX_PLATFORM_LIBS)
 elseif(APPLE)
@@ -73,6 +78,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(whereami)
 
 add_library(whereami STATIC ${whereami_SOURCE_DIR}/src/whereami.c)
+if(NOT WIN32)
+    set_target_properties(whereami PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 target_include_directories(whereami PUBLIC ${whereami_SOURCE_DIR}/src)
 if(CMAKE_DL_LIBS)
     target_link_libraries(whereami PUBLIC ${CMAKE_DL_LIBS})
