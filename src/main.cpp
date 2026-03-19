@@ -60,9 +60,9 @@ int main() {
 
     // Load backend
     dylib::library backend_lib((curr_dir / kBackendLibraryStem).string(), dylib::decorations::os_default());
-    auto backend_set_driver = backend_lib.get_function<void(const OxDriverCallbacks*)>("set_driver");
-    auto backend_initialize = backend_lib.get_function<int()>("initialize");
-    auto backend_shutdown = backend_lib.get_function<void()>("shutdown");
+    auto backend_set_driver = backend_lib.get_function<void(const OxDriverCallbacks*)>("ox_ipc_backend_set_driver");
+    auto backend_initialize = backend_lib.get_function<int()>("ox_ipc_backend_initialize");
+    auto backend_shutdown = backend_lib.get_function<void()>("ox_ipc_backend_shutdown");
 
     backend_set_driver(&driver);
     if (backend_initialize() != 1) {
