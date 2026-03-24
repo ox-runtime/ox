@@ -53,6 +53,23 @@ function(ox_add_component content_name repo_url local_repo)
     FetchContent_MakeAvailable(${content_name})
 endfunction()
 
+set(OX_DRIVER_HEADER_LOCAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ox_driver.h")
+if(EXISTS "${OX_DRIVER_HEADER_LOCAL_PATH}")
+    set(OX_DRIVER_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+else()
+    FetchContent_Declare(
+        ox_driver_header
+        URL https://github.com/ox-runtime/ox-runtime/releases/latest/download/ox_driver.h
+        DOWNLOAD_NO_EXTRACT TRUE
+        DOWNLOAD_NAME ox_driver.h
+    )
+    FetchContent_GetProperties(ox_driver_header)
+    if(NOT ox_driver_header_POPULATED)
+        FetchContent_Populate(ox_driver_header)
+    endif()
+    set(OX_DRIVER_INCLUDE_DIR "${ox_driver_header_SOURCE_DIR}")
+endif()
+
 FetchContent_Declare(
     spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog
@@ -93,9 +110,9 @@ ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.
 add_executable(ox src/main.cpp)
 
 target_include_directories(ox PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${dylib_SOURCE_DIR}/include
     ${whereami_SOURCE_DIR}/src
+    ${OX_DRIVER_INCLUDE_DIR}
 )
 
 target_link_libraries(ox PRIVATE
