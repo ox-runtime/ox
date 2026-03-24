@@ -49,7 +49,7 @@ int main() {
         spdlog::error("Driver registration failed");
         return 1;
     }
-    if (!driver.initialize || !driver.is_device_connected || !driver.update_view_pose) {
+    if (!driver.initialize || !driver.is_device_connected || !driver.update_view) {
         spdlog::error("Driver missing required callbacks");
         return 1;
     }
