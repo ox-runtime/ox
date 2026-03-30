@@ -21,6 +21,8 @@ cmake -B build
 cmake --build build --config Release
 ```
 
+The build will be produced in `./build/bin/`.
+
 By default, the top-level CMake build fetches those repos with `FetchContent`. To work against local repo clones instead, pass any of these build-time flags:
 
 - `OX_RUNTIME_REPO`
@@ -36,8 +38,6 @@ cmake -B build \
 	-DOX_SIM_DRIVER_REPO=/path/to/ox-sim-driver
 cmake --build build --target ox --config Release
 ```
-
-The build will be produced in `./build/bin/`.
 
 ## Using the Runtime
 
