@@ -23,17 +23,17 @@ cmake --build build --config Release
 
 By default, the top-level CMake build fetches those repos with `FetchContent`. To work against local repo clones instead, pass any of these build-time flags:
 
-- `OX_RUNTIME_REPO_PATH`
-- `OX_IPC_PROXY_REPO_PATH`
-- `OX_SIM_DRIVER_REPO_PATH`
+- `OX_RUNTIME_REPO`
+- `OX_IPC_PROXY_REPO`
+- `OX_SIM_DRIVER_REPO`
 
 For e.g. to build against local clones of all three repos:
 
 ```bash
 cmake -B build \
-	-DOX_RUNTIME_REPO_PATH=/path/to/ox-runtime \
-	-DOX_IPC_PROXY_REPO_PATH=/path/to/ox-ipc-proxy \
-	-DOX_SIM_DRIVER_REPO_PATH=/path/to/ox-sim-driver
+	-DOX_RUNTIME_REPO=/path/to/ox-runtime \
+	-DOX_IPC_PROXY_REPO=/path/to/ox-ipc-proxy \
+	-DOX_SIM_DRIVER_REPO=/path/to/ox-sim-driver
 cmake --build build --target ox --config Release
 ```
 
