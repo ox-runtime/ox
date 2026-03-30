@@ -46,7 +46,7 @@ function(ox_add_component content_name repo_url repo_tag local_repo)
             ${content_name}
             GIT_REPOSITORY "${repo_url}"
             GIT_TAG "${repo_tag}"
-            GIT_SHALLOW TRUE
+            GIT_SHALLOW true
         )
     endif()
 
