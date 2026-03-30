@@ -55,6 +55,12 @@ export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json
 
 Then run any OpenXR application.
 
+## Documentation
+
+- [Simulator GUI reference](docs/gui.md)
+- [Simulator REST API reference](docs/rest_api.md)
+- [Simulator C API reference](docs/c_api.md)
+
 ## References
 
 - [OpenXR Specification](https://www.khronos.org/registry/OpenXR/)
