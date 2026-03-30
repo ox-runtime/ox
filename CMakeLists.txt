@@ -28,7 +28,7 @@ else()
     set(OX_PLATFORM_LIBS pthread rt dl)
 endif()
 
-function(ox_add_component content_name repo_url local_repo)
+function(ox_add_component content_name repo_url repo_tag local_repo)
     if(local_repo)
         get_filename_component(component_source_dir "${local_repo}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
         if(NOT EXISTS "${component_source_dir}/CMakeLists.txt")
@@ -45,7 +45,7 @@ function(ox_add_component content_name repo_url local_repo)
         FetchContent_Declare(
             ${content_name}
             GIT_REPOSITORY "${repo_url}"
-            GIT_TAG main
+            GIT_TAG "${repo_tag}"
             GIT_SHALLOW TRUE
         )
     endif()
@@ -86,9 +86,9 @@ if(CMAKE_DL_LIBS)
     target_link_libraries(whereami PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
-ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "${OX_RUNTIME_REPO}")
-ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "${OX_IPC_PROXY_REPO}")
-ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "${OX_SIM_DRIVER_REPO}")
+ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "v0.2.0" "${OX_RUNTIME_REPO}")
+ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "v0.2.0" "${OX_IPC_PROXY_REPO}")
+ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "v0.5.0" "${OX_SIM_DRIVER_REPO}")
 
 add_executable(ox src/main.cpp)
 
