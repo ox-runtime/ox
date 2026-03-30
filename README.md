@@ -23,7 +23,8 @@ cmake --build build --config Release
 
 The build will be produced in `./build/bin/`.
 
-By default, the top-level CMake build fetches those repos with `FetchContent`. To work against local repo clones instead, pass any of these build-time flags:
+### Working with local checkouts
+By default, the top-level CMake build fetches the sub-project repos with `FetchContent`. To work against local repo clones instead, pass any of these build-time flags:
 
 - `OX_RUNTIME_REPO`
 - `OX_IPC_PROXY_REPO`
