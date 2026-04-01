@@ -37,7 +37,7 @@ jobs:
             runs_on: macos-latest
             target_os: mac
             target_arch: arm64
-            asset_basename: ox-mac-arm64
+            asset_basename: ox-macos-arm64
             build_dir: build/macos-arm64
             app_exec: ox
             cmake_osx_architectures: arm64
@@ -46,7 +46,7 @@ jobs:
             runs_on: macos-latest
             target_os: mac
             target_arch: x86_64
-            asset_basename: ox-mac-x64
+            asset_basename: ox-macos-x64
             build_dir: build/macos-x64
             app_exec: ox
             cmake_osx_architectures: x86_64
