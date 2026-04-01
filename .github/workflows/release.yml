@@ -30,12 +30,14 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           libgl1-mesa-dev \
+          libxcb-dev \
           libx11-dev \
           libvulkan-dev \
           libxrandr-dev \
           libxinerama-dev \
           libxcursor-dev \
           libxi-dev \
+          libpng-dev \
           pkg-config
 
     - name: Build ox
