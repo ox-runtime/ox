@@ -207,17 +207,19 @@ jobs:
         run: |
           cmake --build "${{ matrix.build_dir }}" --target ox runtime_tests --parallel
 
-      - name: Run runtime tests on Windows
+      - name: Run tests on Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           & "${{ matrix.build_dir }}\bin\tests\runtime\runtime_tests.exe"
+          & "${{ matrix.build_dir }}\bin\tests\ipc_proxy_tests.exe"
 
-      - name: Run runtime tests on Linux and macOS
+      - name: Run tests on Linux and macOS
         if: runner.os != 'Windows'
         shell: bash
         run: |
           "${{ matrix.build_dir }}/bin/tests/runtime/runtime_tests"
+          "${{ matrix.build_dir }}/bin/tests/ipc_proxy_tests"
 
       - name: Stage Windows package contents
         if: runner.os == 'Windows'
