@@ -23,7 +23,7 @@ jobs:
             runs_on: windows-latest
             target_os: windows
             target_arch: x86_64
-            asset_basename: ox-win-x64
+            asset_basename: ox-windows-x64
             build_dir: build/win-x64
             app_exec: ox.exe
           - job_name: Linux x64
