@@ -1,90 +1,288 @@
 name: Release
 
 on:
+  workflow_dispatch:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
+env:
+  APP_NAME: ox-runtime
+
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
+    name: ${{ matrix.job_name }}
+    runs-on: ${{ matrix.runs_on }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - job_name: Windows x64
+            runs_on: windows-latest
+            target_os: windows
+            target_arch: x86_64
+            asset_basename: ox-win-x64
+            build_dir: build/win-x64
+            app_exec: ox.exe
+          - job_name: Linux x64
+            runs_on: ubuntu-24.04
+            target_os: linux
+            target_arch: x86_64
+            asset_basename: ox-linux-x64
+            build_dir: build/linux-x64
+            app_exec: ox
+          - job_name: macOS arm64
+            runs_on: macos-latest
+            target_os: mac
+            target_arch: arm64
+            asset_basename: ox-mac-arm64
+            build_dir: build/macos-arm64
+            app_exec: ox
+            cmake_osx_architectures: arm64
+            cmake_osx_deployment_target: '11.0'
+          - job_name: macOS x64
+            runs_on: macos-latest
+            target_os: mac
+            target_arch: x86_64
+            asset_basename: ox-mac-x64
+            build_dir: build/macos-x64
+            app_exec: ox
+            cmake_osx_architectures: x86_64
+            cmake_osx_deployment_target: '10.15'
+
+    env:
+      STAGE_DIR: dist/stage/${{ matrix.asset_basename }}
+      ARTIFACT_DIR: dist/packages/${{ matrix.asset_basename }}
+
     steps:
-    - name: Checkout ox
-      uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v6
 
-    - name: Install dependencies (Windows)
-      if: runner.os == 'Windows'
-      uses: humbletim/setup-vulkan-sdk@v1.2.1
-      with:
-        vulkan-query-version: latest
-        vulkan-components: Vulkan-Headers, Vulkan-Loader
-        vulkan-use-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
 
-    - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libgl1-mesa-dev \
-          libx11-dev \
-          libvulkan-dev \
-          libxrandr-dev \
-          libxinerama-dev \
-          libxcursor-dev \
-          libxi-dev \
-          libpng-dev \
-          pkg-config
+      - name: Derive application version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.0.0-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "APP_VERSION=${version}" >> "$GITHUB_ENV"
 
-    - name: Build ox
-      run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --config Release
+      - name: Install Vulkan SDK on Windows
+        if: runner.os == 'Windows'
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: latest
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
 
-    - name: Run runtime tests
-      shell: bash
-      run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          ./build/bin/tests/runtime/runtime_tests.exe
-        else
-          ./build/bin/tests/runtime/runtime_tests
-        fi
+      - name: Install Linux build and packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            flatpak \
+            flatpak-builder \
+            libgl1-mesa-dev \
+            libpng-dev \
+            libvulkan-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            pkg-config \
+            snapd \
+            squashfs-tools
+          sudo systemctl start snapd.socket
+          sudo snap install snapcraft --classic
+          sudo snap install core24
+          appimagetool="$RUNNER_TEMP/appimagetool"
+          curl -L "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -o "$appimagetool"
+          chmod +x "$appimagetool"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-    - name: Create zip
-      shell: bash
-      run: |
-        cd build
-        mv bin ox-runtime
-        rm -rf ox-runtime/tests
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          ZIP_FILE_NAME="ox-runtime-win-x64.zip"
-          powershell -Command "Compress-Archive -Path ox-runtime -DestinationPath $ZIP_FILE_NAME"
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          ZIP_FILE_NAME="ox-runtime-mac-arm64.zip"
-          zip -r $ZIP_FILE_NAME ox-runtime
-        else
-          ZIP_FILE_NAME="ox-runtime-linux-x64.zip"
-          zip -r $ZIP_FILE_NAME ox-runtime
-        fi
-        echo "ZIP_FILE=$ZIP_FILE_NAME" >> $GITHUB_ENV
+      - name: Install EasyInstaller from GitHub
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          git clone --depth 1 https://github.com/cmdr2/easyinstaller.git easyinstaller-src
+          python -m pip install ./easyinstaller-src
 
-    - name: Set ox_driver.h path
-      shell: bash
-      run: |
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          echo "HEADER_FILE=include/ox_driver.h" >> $GITHUB_ENV
-        else
-          echo "HEADER_FILE=" >> $GITHUB_ENV
-        fi
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          nsis_zip="$RUNNER_TEMP/nsis.zip"
+          curl -L 'https://sourceforge.net/projects/nsisbi/files/nsisbi3.10.3/nsis-binary-7423-3.zip/download' -o "$nsis_zip"
+          unzip -q "$nsis_zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/nsis-binary-7423-3" >> "$GITHUB_PATH"
 
-    - name: Upload release asset
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          build/${{ env.ZIP_FILE }}
-          ${{ env.HEADER_FILE }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate macOS signing secrets
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          MAC_NOTARY_APPLE_ID: ${{ secrets.MAC_NOTARY_APPLE_ID }}
+          MAC_NOTARY_TEAM_ID: ${{ secrets.MAC_NOTARY_TEAM_ID }}
+          MAC_NOTARY_TEAM_NAME: ${{ secrets.MAC_NOTARY_TEAM_NAME }}
+          MAC_NOTARY_PASSWORD: ${{ secrets.MAC_NOTARY_PASSWORD }}
+        run: |
+          missing=()
+          for name in \
+            MAC_CERTIFICATE_P12_BASE64 \
+            MAC_CERTIFICATE_PASSWORD \
+            MAC_NOTARY_APPLE_ID \
+            MAC_NOTARY_TEAM_ID \
+            MAC_NOTARY_TEAM_NAME \
+            MAC_NOTARY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "Missing required macOS signing secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Import Apple code signing certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          printf '%s' "${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}" | base64 --decode > app-cert.p12
+          openssl pkcs12 -in app-cert.p12 -passin env:MAC_CERTIFICATE_PASSWORD -noout >/dev/null
+          openssl pkcs12 -in app-cert.p12 -passin env:MAC_CERTIFICATE_PASSWORD -nodes -out app-cert.pem
+          openssl pkcs12 -export -in app-cert.pem -out app-cert-compat.p12 \
+            -passout env:MAC_CERTIFICATE_PASSWORD \
+            -keypbe PBE-SHA1-3DES \
+            -certpbe PBE-SHA1-3DES \
+            -macalg sha1
+
+          security create-keychain -p "$RUNNER_TEMP" build.keychain
+          security unlock-keychain -p "$RUNNER_TEMP" build.keychain
+          security default-keychain -s build.keychain
+          security import app-cert-compat.p12 -k build.keychain -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$RUNNER_TEMP" build.keychain
+          security list-keychains -d user -s build.keychain
+
+      - name: Configure on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -B "${{ matrix.build_dir }}" -A x64
+
+      - name: Configure on Linux and macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cmake_args=(
+            -B "${{ matrix.build_dir }}"
+            -DCMAKE_BUILD_TYPE=Release
+          )
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            cmake_args+=(
+              -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_architectures }}
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.cmake_osx_deployment_target }}
+            )
+          fi
+          cmake "${cmake_args[@]}"
+
+      - name: Build on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --build "${{ matrix.build_dir }}" --config Release --target ox runtime_tests
+
+      - name: Build on Linux and macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cmake --build "${{ matrix.build_dir }}" --target ox runtime_tests --parallel
+
+      - name: Run runtime tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "${{ matrix.build_dir }}\bin\tests\runtime\runtime_tests.exe"
+
+      - name: Run runtime tests on Linux and macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          "${{ matrix.build_dir }}/bin/tests/runtime/runtime_tests"
+
+      - name: Stage Windows package contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "${env:STAGE_DIR}" | Out-Null
+          New-Item -ItemType Directory -Force -Path "${env:ARTIFACT_DIR}" | Out-Null
+          Copy-Item -Recurse -Force "${{ matrix.build_dir }}\bin\*" "${env:STAGE_DIR}"
+          Remove-Item -Recurse -Force (Join-Path "${env:STAGE_DIR}" "tests") -ErrorAction SilentlyContinue
+
+      - name: Stage Linux and macOS package contents
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "$STAGE_DIR" "$ARTIFACT_DIR"
+          cp -a "${{ matrix.build_dir }}/bin/." "$STAGE_DIR/"
+          rm -rf "$STAGE_DIR/tests"
+
+      - name: Package Windows outputs
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          output_base="$ARTIFACT_DIR/${{ matrix.asset_basename }}"
+          easyinstaller --source "$STAGE_DIR" --os windows --arch ${{ matrix.target_arch }} --type zip --output "$output_base"
+          easyinstaller --source "$STAGE_DIR" --os windows --arch ${{ matrix.target_arch }} --type nsis --output "${output_base}-setup" --app-name "$APP_NAME" --app-version "$APP_VERSION" --app-exec "${{ matrix.app_exec }}"
+
+      - name: Package Linux outputs
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          output_base="$ARTIFACT_DIR/${{ matrix.asset_basename }}"
+          easyinstaller --source "$STAGE_DIR" --os linux --arch ${{ matrix.target_arch }} --type zip --output "$output_base"
+          easyinstaller --source "$STAGE_DIR" --os linux --arch ${{ matrix.target_arch }} --type appimage --output "$output_base" --app-name "$APP_NAME" --app-version "$APP_VERSION" --app-exec "${{ matrix.app_exec }}"
+          easyinstaller --source "$STAGE_DIR" --os linux --arch ${{ matrix.target_arch }} --type flatpak --output "$output_base" --app-name "$APP_NAME" --app-version "$APP_VERSION" --app-exec "${{ matrix.app_exec }}"
+          easyinstaller --source "$STAGE_DIR" --os linux --arch ${{ matrix.target_arch }} --type snap --output "$output_base" --app-name "$APP_NAME" --app-version "$APP_VERSION" --app-exec "${{ matrix.app_exec }}"
+
+      - name: Package macOS output
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          easyinstaller --source "$STAGE_DIR" --os mac --arch ${{ matrix.target_arch }} --type app-in-dmg \
+            --output "$ARTIFACT_DIR/${{ matrix.asset_basename }}" \
+            --app-name "$APP_NAME" \
+            --app-version "$APP_VERSION" \
+            --app-exec "${{ matrix.app_exec }}" \
+            --mac-notarize \
+            --mac-notary-team-name "${{ secrets.MAC_NOTARY_TEAM_NAME }}" \
+            --mac-notary-apple-id "${{ secrets.MAC_NOTARY_APPLE_ID }}" \
+            --mac-notary-team-id "${{ secrets.MAC_NOTARY_TEAM_ID }}" \
+            --mac-notary-password "${{ secrets.MAC_NOTARY_PASSWORD }}"
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=("$ARTIFACT_DIR"/*)
+          if (( ${#files[@]} == 0 )); then
+            echo "No packaged files found in $ARTIFACT_DIR"
+            exit 1
+          fi
+          gh release upload "${{ github.event.release.tag_name }}" "${files[@]}" --clobber
