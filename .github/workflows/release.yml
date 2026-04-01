@@ -181,14 +181,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cmake -B "${{ matrix.build_dir }}" -G Ninja
+          cmake -B "${{ matrix.build_dir }}" -A x64
 
       - name: Configure on Linux and macOS
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cmake_args=(
-            -G Ninja
             -B "${{ matrix.build_dir }}"
             -DCMAKE_BUILD_TYPE=Release
           )
