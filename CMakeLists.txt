@@ -91,7 +91,7 @@ if(CMAKE_DL_LIBS)
 endif()
 
 ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "v0.2.2" "${OX_RUNTIME_REPO}")
-ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "v0.2.3" "${OX_IPC_PROXY_REPO}")
+ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "v0.2.4" "${OX_IPC_PROXY_REPO}")
 ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "v0.5.3" "${OX_SIM_DRIVER_REPO}")
 
 add_executable(ox src/main.cpp)
