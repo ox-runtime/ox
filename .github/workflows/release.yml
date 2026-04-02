@@ -111,7 +111,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          git clone --depth 1 https://github.com/cmdr2/easyinstaller.git easyinstaller-src
+          git clone --depth 1 --branch v0.4.0 https://github.com/cmdr2/easyinstaller.git easyinstaller-src
           python -m pip install ./easyinstaller-src
 
       - name: Install NSIS
