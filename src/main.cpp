@@ -12,7 +12,7 @@
 namespace fs = std::filesystem;
 
 constexpr std::string_view kDriverLibraryStem = "ox_driver";
-constexpr std::string_view kBackendLibraryStem = "ox_ipc_backend";
+constexpr std::string_view kServerLibraryStem = "ox_ipc_server";
 
 bool IsMacSimulatorDriver(const fs::path& driver_dir) {
 #if defined(__APPLE__)
@@ -52,7 +52,7 @@ int main() {
 
     // Load driver
     const fs::path driver_dir = driver_dirs[0];
-    const bool start_backend_before_driver_init = IsMacSimulatorDriver(driver_dir);
+    const bool start_server_before_driver_init = IsMacSimulatorDriver(driver_dir);
     dylib::library driver_lib((driver_dir / kDriverLibraryStem).string(), dylib::decorations::os_default());
     auto ox_driver_register = driver_lib.get_function<int(OxDriverCallbacks*)>("ox_driver_register");
     OxDriverCallbacks driver{};
@@ -64,29 +64,29 @@ int main() {
         spdlog::error("Driver missing required callbacks");
         return 1;
     }
-    // Load backend
-    dylib::library backend_lib((curr_dir / kBackendLibraryStem).string(), dylib::decorations::os_default());
-    auto backend_set_driver = backend_lib.get_function<void(const OxDriverCallbacks*)>("ox_ipc_backend_set_driver");
-    auto backend_initialize = backend_lib.get_function<int()>("ox_ipc_backend_initialize");
-    auto backend_shutdown = backend_lib.get_function<void()>("ox_ipc_backend_shutdown");
+    // Load server
+    dylib::library server_lib((curr_dir / kServerLibraryStem).string(), dylib::decorations::os_default());
+    auto server_set_driver = server_lib.get_function<void(const OxDriverCallbacks*)>("ox_ipc_server_set_driver");
+    auto server_initialize = server_lib.get_function<int()>("ox_ipc_server_initialize");
+    auto server_shutdown = server_lib.get_function<void()>("ox_ipc_server_shutdown");
 
-    bool backend_started = false;
+    bool server_started = false;
 
-    if (start_backend_before_driver_init) {
-        spdlog::info("Starting IPC backend before simulator GUI initialization on macOS");
-        backend_set_driver(&driver);
-        if (backend_initialize() != 1) {
-            spdlog::error("ox_ipc_backend initialize() failed");
+    if (start_server_before_driver_init) {
+        spdlog::info("Starting IPC server before simulator GUI initialization on macOS");
+        server_set_driver(&driver);
+        if (server_initialize() != 1) {
+            spdlog::error("ox_ipc_server initialize() failed");
             return 1;
         }
-        backend_started = true;
+        server_started = true;
         spdlog::info("ox host started");
     }
 
     if (!driver.initialize()) {
         spdlog::error("Driver initialize() failed");
-        if (backend_started) {
-            backend_shutdown();
+        if (server_started) {
+            server_shutdown();
         }
         if (driver.shutdown) {
             driver.shutdown();
@@ -94,16 +94,16 @@ int main() {
         return 1;
     }
 
-    if (!backend_started) {
-        backend_set_driver(&driver);
-        if (backend_initialize() != 1) {
-            spdlog::error("ox_ipc_backend initialize() failed");
+    if (!server_started) {
+        server_set_driver(&driver);
+        if (server_initialize() != 1) {
+            spdlog::error("ox_ipc_server initialize() failed");
             if (driver.shutdown) {
                 driver.shutdown();
             }
             return 1;
         }
-        backend_started = true;
+        server_started = true;
         spdlog::info("ox host started");
     }
 
@@ -113,8 +113,8 @@ int main() {
 
     spdlog::info("Driver signaled shutdown. Cleaning up...");
 
-    if (backend_started) {
-        backend_shutdown();
+    if (server_started) {
+        server_shutdown();
     }
     if (driver.shutdown) {
         driver.shutdown();

@@ -127,7 +127,7 @@ set_target_properties(ox PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
 )
 
-add_dependencies(ox ox_runtime ox_ipc_frontend ox_ipc_backend ox-simulator)
+add_dependencies(ox ox_runtime ox_ipc_client ox_ipc_server ox-simulator)
 
 get_target_property(OX_SIM_DRIVER_OUTPUT_DIR ox-simulator RUNTIME_OUTPUT_DIRECTORY)
 if(NOT OX_SIM_DRIVER_OUTPUT_DIR)
