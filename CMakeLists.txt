@@ -94,6 +94,16 @@ ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "v
 ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "v0.2.6" "${OX_IPC_PROXY_REPO}")
 ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "v0.5.3" "${OX_SIM_DRIVER_REPO}")
 
+function(ox_apply_version_defines target_name)
+    if(TARGET ${target_name})
+        target_compile_definitions(${target_name} PRIVATE
+            OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+            OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+            OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+        )
+    endif()
+endfunction()
+
 add_executable(ox src/main.cpp)
 
 target_include_directories(ox PRIVATE
@@ -109,17 +119,10 @@ target_link_libraries(ox PRIVATE
     ${OX_PLATFORM_LIBS}
 )
 
-target_compile_definitions(ox PRIVATE
-    OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-    OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-    OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-)
-
-target_compile_definitions(ox-simulator PRIVATE
-    OX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-    OX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-    OX_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-)
+ox_apply_version_defines(ox)
+ox_apply_version_defines(ox_runtime)
+ox_apply_version_defines(runtime_tests)
+ox_apply_version_defines(ox-simulator)
 
 set_target_properties(ox PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
