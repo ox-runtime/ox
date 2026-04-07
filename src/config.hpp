@@ -28,21 +28,28 @@ inline bool LoadConfig(const std::filesystem::path& config_path, YAML::Node& out
 inline void ApplyScalarNode(const YAML::Node& node, OxDriver* d, const std::string& k) {
     if (!d) return;
 
-    const std::string& tag = node.Tag();
+    // try bool
+    bool boolVal;
+    if (YAML::convert<bool>::decode(node, boolVal)) {
+        if (d->set_config_bool) d->set_config_bool(k.c_str(), boolVal ? XR_TRUE : XR_FALSE);
+        return;
+    }
 
-    if (tag == "tag:yaml.org,2002:bool") {
-        if (d->set_config_bool) d->set_config_bool(k.c_str(), node.as<bool>() ? XR_TRUE : XR_FALSE);
+    // try int
+    int64_t intVal;
+    if (YAML::convert<int64_t>::decode(node, intVal)) {
+        if (d->set_config_int) d->set_config_int(k.c_str(), intVal);
         return;
     }
-    if (tag == "tag:yaml.org,2002:int") {
-        if (d->set_config_int) d->set_config_int(k.c_str(), node.as<int64_t>());
+
+    // try float
+    float floatVal;
+    if (YAML::convert<float>::decode(node, floatVal)) {
+        if (d->set_config_float) d->set_config_float(k.c_str(), floatVal);
         return;
     }
-    if (tag == "tag:yaml.org,2002:float") {
-        if (d->set_config_float) d->set_config_float(k.c_str(), node.as<float>());
-        return;
-    }
-    // tag:yaml.org,2002:str or unresolved/plain — treat as string
+
+    // fallback to string
     if (d->set_config_string) d->set_config_string(k.c_str(), node.Scalar().c_str());
 }
 
