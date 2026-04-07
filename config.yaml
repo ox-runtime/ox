@@ -1,0 +1,7 @@
+drivers:
+  simulator:
+    gui:
+      enabled: true
+    rest_api:
+      enabled: true
+      port: 8765

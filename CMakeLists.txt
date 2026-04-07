@@ -74,6 +74,14 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(dylib)
 
 FetchContent_Declare(
+    yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG yaml-cpp-0.9.0
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(yaml-cpp)
+
+FetchContent_Declare(
     whereami
     GIT_REPOSITORY https://github.com/gpakosz/whereami.git
     GIT_TAG master
@@ -116,6 +124,7 @@ target_link_libraries(ox PRIVATE
     spdlog::spdlog
     dylib
     whereami
+    yaml-cpp
     ${OX_PLATFORM_LIBS}
 )
 
@@ -143,8 +152,9 @@ endif()
 
 add_custom_command(TARGET ox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ox>/drivers"
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "$<TARGET_FILE_DIR:ox>/drivers/ox_simulator"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${OX_SIM_DRIVER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:ox>/drivers/ox_simulator"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "$<TARGET_FILE_DIR:ox>/drivers/simulator"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${OX_SIM_DRIVER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:ox>/drivers/simulator"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml" "$<TARGET_FILE_DIR:ox>/config.yaml"
     VERBATIM
 )
 

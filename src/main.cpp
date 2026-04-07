@@ -2,12 +2,15 @@
 #include <spdlog/spdlog.h>
 #include <whereami.h>
 
+#include <cassert>
 #include <chrono>
 #include <dylib.hpp>
 #include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "config.hpp"
 
 namespace fs = std::filesystem;
 
@@ -16,7 +19,7 @@ constexpr std::string_view kServerLibraryStem = "ox_ipc_server";
 
 bool IsMacSimulatorDriver(const fs::path& driver_dir) {
 #if defined(__APPLE__)
-    return driver_dir.filename() == "ox_simulator";
+    return driver_dir.filename() == "simulator";
 #else
     (void)driver_dir;
     return false;
@@ -54,8 +57,8 @@ int main() {
     const fs::path driver_dir = driver_dirs[0];
     const bool start_server_before_driver_init = IsMacSimulatorDriver(driver_dir);
     dylib::library driver_lib((driver_dir / kDriverLibraryStem).string(), dylib::decorations::os_default());
-    auto ox_driver_register = driver_lib.get_function<int(OxDriverCallbacks*)>("ox_driver_register");
-    OxDriverCallbacks driver{};
+    auto ox_driver_register = driver_lib.get_function<int(OxDriver*)>("ox_driver_register");
+    OxDriver driver{};
     if (!ox_driver_register || !ox_driver_register(&driver)) {
         spdlog::error("Driver registration failed");
         return 1;
@@ -64,9 +67,17 @@ int main() {
         spdlog::error("Driver missing required callbacks");
         return 1;
     }
+
+    YAML::Node config;
+    if (!ox::LoadConfig(curr_dir / "config.yaml", config)) {
+        spdlog::error("Failed to load config.yaml");
+        return 1;
+    }
+    ox::ApplyDriverConfig(config, driver_dir.filename().string(), &driver);
+
     // Load server
     dylib::library server_lib((curr_dir / kServerLibraryStem).string(), dylib::decorations::os_default());
-    auto server_set_driver = server_lib.get_function<void(const OxDriverCallbacks*)>("ox_ipc_server_set_driver");
+    auto server_set_driver = server_lib.get_function<void(const OxDriver*)>("ox_ipc_server_set_driver");
     auto server_initialize = server_lib.get_function<int()>("ox_ipc_server_initialize");
     auto server_shutdown = server_lib.get_function<void()>("ox_ipc_server_shutdown");
 
