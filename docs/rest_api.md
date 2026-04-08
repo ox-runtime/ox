@@ -84,7 +84,8 @@ Example response:
 
 ```json
 {
-  "type": "Meta Quest 2 (Simulated)",
+  "id": "oculus_quest_2",
+  "name": "Meta Quest 2 (Simulated)",
   "manufacturer": "Meta Platforms",
   "interaction_profile": "/interaction_profiles/oculus/touch_controller",
   "devices": [
@@ -116,7 +117,7 @@ Request body:
 
 ```json
 {
-  "device": "htc_vive"
+  "profile_id": "htc_vive"
 }
 ```
 
@@ -125,7 +126,8 @@ Example response:
 ```json
 {
   "status": "ok",
-  "device": "HTC Vive (Simulated)",
+  "profile_id": "htc_vive",
+  "name": "HTC Vive (Simulated)",
   "interaction_profile": "/interaction_profiles/htc/vive_controller"
 }
 ```
@@ -206,27 +208,31 @@ Example response:
 
 ```json
 {
-  "boolean_value": false,
-  "float_value": 0.8,
-  "x": 0.0,
-  "y": 0.0
+  "type": "float",
+  "description": "Trigger",
+  "value": 0.8
 }
 ```
 
-Update requests accept either a scalar `value` or a 2D vector:
+Possible values for `type`: `boolean`, `float`, or `vector2`.
 
+Update requests must match the component type returned by `GET /v1/profile`:
+
+**float**:
 ```json
 {
   "value": 0.8
 }
 ```
 
+**boolean**:
 ```json
 {
   "value": true
 }
 ```
 
+**vector2**:
 ```json
 {
   "x": 0.25,
