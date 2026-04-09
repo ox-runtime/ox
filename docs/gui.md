@@ -2,6 +2,10 @@
 
 <img height="400" alt="image" src="https://github.com/user-attachments/assets/e2b888d6-2295-4aa7-8aa0-be7f1b620c08" />
 
+## Usage
+
+Run `ox.exe` (Windows) or `./ox` (Linux/macOS) to launch the simulator GUI.
+
 ## Overview
 
 The simulator GUI is divided into three areas:
