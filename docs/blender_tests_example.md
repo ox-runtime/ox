@@ -11,7 +11,7 @@ export XR_RUNTIME_JSON="/path/to/ox/ox_runtime.json"
 export OX_USE_SIMULATOR=1
 ```
 
-**Note for Mac**: If you installed using a `.dmg`, then `ox_runtime.json` can be found at `/path/to/ox-runtime.App/Contents/Resources/ox_runtime.json`
+**Note for Mac**: If you installed using a `.dmg`, then `ox_runtime.json` can be found at `/path/to/ox-runtime.app/Contents/Resources/ox_runtime.json`
 
 Run the following tests with `./blender --python /path/to/test.py`
 
