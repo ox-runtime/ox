@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.27)
 
 if(APPLE)
-    project(ox VERSION 0.6.0 LANGUAGES C CXX OBJC OBJCXX)
+    project(ox VERSION 0.6.1 LANGUAGES C CXX OBJC OBJCXX)
 else()
-    project(ox VERSION 0.6.0 LANGUAGES C CXX)
+    project(ox VERSION 0.6.1 LANGUAGES C CXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
