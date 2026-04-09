@@ -16,7 +16,7 @@ ox can be used in three ways:
 - [REST API](docs/rest_api.md) (by accessing `http://localhost:8765/` after running ox).
 - Directly inside your test code (by setting the `XR_RUNTIME_JSON` and `OX_USE_SIMULATOR=1` environment variables).
 
-Here's an example for automatically testing [Blender's XR mode](docs/blender_tests.md).
+Here's an example for automatically testing [Blender's XR mode](docs/blender_tests_example.md).
 
 ## Code
 
