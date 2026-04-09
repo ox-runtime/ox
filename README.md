@@ -24,7 +24,7 @@ The code is organized into multiple repositories:
 - [ox](https://github.com/ox-runtime/ox) (this repo): the host executable and CMake build orchestration
 - [ox-sim-driver](https://github.com/ox-runtime/ox-sim-driver): the simulator GUI and C API for controlling the virtual device programmatically
 - [ox-runtime](https://github.com/ox-runtime/ox-runtime): the OpenXR runtime implementation
-- [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): a shared library that both the runtime and simulator driver depend on for IPC communication
+- [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): a shared library that both the runtime and driver service depend on for IPC communication
 
 ## Build
 
