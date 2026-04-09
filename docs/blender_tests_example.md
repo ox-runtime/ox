@@ -1,8 +1,8 @@
 Setup instructions and example tests for Blender (automated XR testing).
 
-**Note:** You can also use the [GUI](./gui.md) version of ox (similar to Meta Simulator).
+**Tip:** You can also use the [GUI](./gui.md) version of ox (similar to Meta Simulator) for interactive testing of Blender's XR mode.
 
-# Setup:
+## Setup
 Download [ox](https://github.com/ox-runtime/ox/releases).
 
 Set the following environment variables:
@@ -15,7 +15,7 @@ export OX_USE_SIMULATOR=1
 
 Run the following tests with `./blender --python /path/to/test.py`
 
-# test_xr_start.py
+## test_xr_start.py
 ```py
 import bpy
 import traceback
@@ -42,7 +42,7 @@ if __name__ == "__main__":
         traceback.print_exc()
 ```
 
-# test_xr_draw_handler.py
+## test_xr_draw_handler.py
 ```py
 import bpy
 import traceback
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         traceback.print_exc()
 ```
 
-# test_xr_object_access_in_draw_handler.py
+## test_xr_object_access_in_draw_handler.py
 ```py
 import bpy
 import traceback
