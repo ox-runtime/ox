@@ -6,6 +6,18 @@
 
 The primary purpose of **ox** is automated testing of OpenXR applications. It comes with a [virtual OpenXR device](https://github.com/ox-runtime/ox-simulator) which can be controlled programmatically (e.g. press a button, move the headset etc). The effect of these actions can then be verified in the OpenXR application that you're testing.
 
+<img height="400" alt="image" src="https://github.com/user-attachments/assets/e2b888d6-2295-4aa7-8aa0-be7f1b620c08" />
+
+## Usage
+Download ox from the [latest release](https://github.com/ox-runtime/ox/releases).
+
+ox can be used in three ways:
+- [GUI](docs/gui.md) (by running `ox.exe` or `./ox`).
+- [REST API](docs/rest_api.md) (by accessing `http://localhost:9876/` after running ox).
+- Directly inside your test code (by setting the `XR_RUNTIME_JSON` and `OX_USE_SIMULATOR=1` environment variables).
+
+Here's an example for automatically testing [Blender's XR mode](docs/blender_tests.md).
+
 ## Code
 
 The code is organized into multiple repositories:
