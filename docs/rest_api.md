@@ -2,11 +2,7 @@
 
 The simulator exposes a local REST API for automation and inspection.
 
-- Base URL: `http://127.0.0.1:8765`
-- Swagger UI: `GET /`
-- OpenAPI document: `GET /openapi.json`
-
-Both the GUI and the HTTP server use the same internal `ox_sim_*` C API, so device state, inputs, and frame previews stay in sync.
+- URL: `http://127.0.0.1:8765`
 
 ## Session Status
 
