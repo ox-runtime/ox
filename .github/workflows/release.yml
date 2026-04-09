@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  APP_NAME: ox-runtime
+  APP_NAME: ox
 
 jobs:
   build:
