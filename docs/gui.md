@@ -1,12 +1,14 @@
 # ox-simulator GUI Reference
 
+<img height="400" alt="image" src="https://github.com/user-attachments/assets/e2b888d6-2295-4aa7-8aa0-be7f1b620c08" />
+
 ## Overview
 
 The simulator GUI is divided into three areas:
 
-- **Top toolbar** — runtime registration, API server controls, and simulated device selection
-- **Preview panel** (left) — live eye texture feed from the connected OpenXR application
-- **Sidebar** (right) — per-device pose and input controls; drag the splitter to resize
+- **Top toolbar** - runtime registration, API server controls, and simulated device selection
+- **Preview panel** (left) - live eye texture feed from the connected OpenXR application
+- **Sidebar** (right) - per-device pose and input controls; drag the splitter to resize
 
 ---
 
@@ -58,7 +60,7 @@ Click anywhere inside the preview image to give it keyboard/mouse focus. This wi
 |--------|--------|
 | Left-drag on image | FPS mouse-look: yaw (horizontal) and pitch (vertical); roll is never introduced |
 
-### Keyboard — Translation
+### Keyboard - Translation
 
 Movement uses an FPS-style basis. `W`/`A`/`S`/`D` follow the viewer's yaw only, so looking up/down or rolling does not tilt movement into the air. `R`/`F` always move along world up/down.
 
@@ -72,7 +74,7 @@ Movement uses an FPS-style basis. `W`/`A`/`S`/`D` follow the viewer's yaw only, 
 | `F` | Move down along world up |
 | `Left Shift` | Hold to move at 3× speed (works with all movement keys) |
 
-### Keyboard — Rotation
+### Keyboard - Rotation
 
 Arrow-key pitch/yaw matches mouse-look and ignores the viewer's current roll. `Q` and `E` still roll around the current view forward axis.
 
@@ -87,7 +89,7 @@ Arrow-key pitch/yaw matches mouse-look and ignores the viewer's current roll. `Q
 
 ---
 
-## Sidebar — Device Panels
+## Sidebar - Device Panels
 
 Each device (HMD, controllers, trackers) has its own panel in the sidebar. Scroll down to see all devices.
 
@@ -96,7 +98,7 @@ Each device (HMD, controllers, trackers) has its own panel in the sidebar. Scrol
 | Control | Description |
 |---------|-------------|
 | **Active** toggle | Enable or disable tracking for this device |
-| **Position** drag (X Y Z) | Drag each axis or Ctrl+click to type a value |
+| **Position** drag (X Y Z) | Drag each axis or Double-click to type a value |
 | **Rotation** drag (Pitch Yaw Roll, °) | Incremental world-space rotation; each axis is independent |
 | **Reset Pose** | Restore the device to its default pose |
 
