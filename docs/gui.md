@@ -103,12 +103,14 @@ Each device (HMD, controllers, trackers) has its own panel in the sidebar. Scrol
 |---------|-------------|
 | **Active** toggle | Enable or disable tracking for this device |
 | **Position** drag (X Y Z) | Drag each axis or Double-click to type a value |
-| **Rotation** drag (Pitch Yaw Roll, °) | Incremental world-space rotation; each axis is independent |
+| **Rotation** drag (Pitch Yaw Roll, °) | Absolute Euler editor; setting all three axes back to `0` restores the identity orientation |
 | **Reset Pose** | Restore the device to its default pose |
 
 ### Input components
 
-Boolean (button) inputs are shown as toggle switches. Float inputs (triggers, grips, thumbstick axes) are shown as sliders.
+Boolean (button) inputs are shown as toggle switches. Float inputs are shown as sliders.
+
+Trigger and squeeze-style float inputs also include a small filled-circle hold button next to the slider. Pressing and holding it ramps the value to `1.0` over `300 ms`, keeps it pinned at `1.0` while held, and releases it back to `0.0` over `100 ms` when released. Thumbstick and trackpad axes continue to use standard sliders only.
 
 ---
 
