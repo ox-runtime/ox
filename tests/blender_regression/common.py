@@ -4,6 +4,8 @@ from mathutils import Quaternion, Vector
 
 from ox_sim import Simulator
 
+EPSILON = 0.0001
+
 # This basis handles the OpenXR-to-Blender 3-way axis swap
 OXR_TO_BLENDER_BASIS = Quaternion((-0.5, 0.5, 0.5, 0.5))
 BLENDER_TO_OXR_BASIS = OXR_TO_BLENDER_BASIS.inverted()
@@ -34,10 +36,12 @@ def setup_function():
     settings.use_positional_tracking = True
     settings.use_absolute_tracking = True
 
+    # reset devices
     sim = STATE["sim"]
-    headset = sim.device("/user/head")
-    headset.position = blender_to_openxr_vec((0, 0, 0))
-    headset.orientation = blender_to_openxr_quat(Quaternion())
+    for device in ("/user/head", "/user/hand/right", "/user/hand/left"):
+        device = sim.device(device)
+        device.position = blender_to_openxr_vec((0, 0, 0))
+        device.orientation = blender_to_openxr_quat(Quaternion())
 
     # stop a running xr session before starting the next test
     if wm.xr_session_state is not None and wm.xr_session_state.is_running(bpy.context):
@@ -91,5 +95,9 @@ def blender_to_openxr_quat(q):
     return OXR_TO_BLENDER_BASIS @ stripped @ BLENDER_TO_OXR_BASIS
 
 
+def vec_equal(a: Vector, b: Vector) -> float:
+    return (a - b).length <= EPSILON
+
+
 def quat_equal(a: Quaternion, b: Quaternion) -> float:
-    return a.rotation_difference(b).angle <= 0.00001
+    return a.rotation_difference(b).angle <= EPSILON

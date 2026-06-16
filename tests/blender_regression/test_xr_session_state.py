@@ -20,6 +20,7 @@ from common import (
     blender_to_openxr_quat,
     openxr_to_blender_vec,
     openxr_to_blender_quat,
+    vec_equal,
     quat_equal,
 )
 from common import setup_module, setup_function, teardown_function, teardown_module, STATE
@@ -53,7 +54,7 @@ def test_navigation_location_change_is_applied():
         # compare against the actual headset pose (after converting to Blender's frame-of-reference).
         # we effectively remove nav and base pose to return to the headset's pose
         headset_pos_bl = openxr_to_blender_vec(headset.position)
-        assert (loc - headset_pos_bl).length < 0.001, f"{loc} != {headset_pos_bl}"
+        assert vec_equal(loc, headset_pos_bl), f"{loc} != {headset_pos_bl}"
 
         # transform the navigation pose (in Blender's frame-of-reference)
         state.navigation_location += Vector((0.02, 0, 0))
@@ -117,7 +118,7 @@ def test_navigation_scale_change_is_applied():
 
         # compare against the actual headset pose (after converting to Blender's frame-of-reference)
         headset_pos_bl = openxr_to_blender_vec(headset.position)
-        assert (loc - headset_pos_bl).length < 0.001, f"{loc} != {headset_pos_bl}"
+        assert vec_equal(loc, headset_pos_bl), f"{loc} != {headset_pos_bl}"
 
         # transform the navigation pose (in Blender's frame-of-reference)
         state.navigation_scale *= 2.0
@@ -167,7 +168,7 @@ def test_navigation_pose_change_is_applied():
         # we effectively remove nav and base pose to return to the headset's pose
         headset_pos_bl = openxr_to_blender_vec(headset.position)
         headset_rot_bl = openxr_to_blender_quat(headset.orientation)
-        assert (loc - headset_pos_bl).length < 0.001, f"{loc} != {headset_pos_bl}"
+        assert vec_equal(loc, headset_pos_bl), f"{loc} != {headset_pos_bl}"
         assert quat_equal(rot, headset_rot_bl), f"{rot.to_euler()} != {headset_rot_bl.to_euler()}"
 
         # transform the navigation pose (in Blender's frame-of-reference)

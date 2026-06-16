@@ -20,6 +20,7 @@ from common import (
     blender_to_openxr_quat,
     openxr_to_blender_vec,
     openxr_to_blender_quat,
+    vec_equal,
     quat_equal,
 )
 from common import setup_module, setup_function, teardown_function, teardown_module, STATE
@@ -44,7 +45,7 @@ def test_base_pose_type_camera_is_tracked():
             yield
 
         loc = state.viewer_pose_location
-        assert (loc - cam.location).length < 0.001, f"{loc} != {cam.location}"
+        assert vec_equal(loc, cam.location), f"{loc} != {cam.location}"
 
         cam.location += Vector((0.02, 0, 0))
 
@@ -69,7 +70,7 @@ def test_base_pose_type_object_is_tracked():
             yield
 
         loc = state.viewer_pose_location
-        assert (loc - ob.location).length < 0.001, f"{loc} != {ob.location}"
+        assert vec_equal(loc, ob.location), f"{loc} != {ob.location}"
 
         ob.location += Vector((0.02, 0, 0))
 
@@ -93,7 +94,7 @@ def test_base_pose_type_custom_is_tracked():
             yield
 
         loc = state.viewer_pose_location
-        assert (loc - settings.base_pose_location).length < 0.001, f"{loc} != {settings.base_pose_location}"
+        assert vec_equal(loc, settings.base_pose_location), f"{loc} != {settings.base_pose_location}"
 
         angle = state.viewer_pose_rotation.to_euler().z
         assert abs(angle - settings.base_pose_angle) < 0.001, f"{angle} != {settings.base_pose_angle}"
@@ -138,7 +139,7 @@ def headset_tracking_test(positional_tracking: bool):
         # compare against the actual headset pose (after converting to Blender's frame-of-reference)
         headset_pos_bl = openxr_to_blender_vec(headset.position) if positional_tracking else Vector()
         headset_rot_bl = openxr_to_blender_quat(headset.orientation)
-        assert (loc - headset_pos_bl).length < 0.001, f"{loc} != {headset_pos_bl}"
+        assert vec_equal(loc, headset_pos_bl), f"{loc} != {headset_pos_bl}"
         assert quat_equal(rot, headset_rot_bl), f"{rot.to_euler()} != {headset_rot_bl.to_euler()}"
 
         # transform the headset (in OpenXR's frame-of-reference)
@@ -194,7 +195,7 @@ def headset_absolute_tracking_test(absolute_tracking: bool):
             headset_pos_bl = openxr_to_blender_vec(Vector(headset.position) - blender_to_openxr_vec((10, 20, 30)))
 
         headset_rot_bl = openxr_to_blender_quat(headset.orientation)  # rot is always absolute
-        assert (loc - headset_pos_bl).length < 0.001, f"{loc} != {headset_pos_bl}"
+        assert vec_equal(loc, headset_pos_bl), f"{loc} != {headset_pos_bl}"
         assert quat_equal(rot, headset_rot_bl), f"{rot.to_euler()} != {headset_rot_bl.to_euler()}"
 
         # transform the headset (in OpenXR's frame-of-reference)

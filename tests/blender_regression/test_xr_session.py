@@ -14,6 +14,7 @@ import bpy
 
 from mathutils import Vector
 
+from common import vec_equal
 from common import setup_module, setup_function, teardown_function, teardown_module, STATE
 
 
@@ -79,7 +80,7 @@ def test_has_valid_context_in_xr():
 
         bpy.data.objects["Light"].location = Vector((1, 1, 1))
         new_loc = bpy.data.objects["Light"].location
-        assert (new_loc - Vector((1, 1, 1))).length < 0.001, "Light location was not updated correctly in draw handler"
+        assert vec_equal(new_loc, Vector((1, 1, 1))), "Light location was not updated correctly in draw handler"
 
         context_valid = True
 
