@@ -276,6 +276,8 @@ _lib.ox_sim_set_input_vector2f.restype = c_int
 
 # Simulator
 class Simulator:
+    __slots__ = ["_device_cache"]
+
     def __init__(self):
         _check(_lib.ox_sim_initialize())
         self._device_cache = None
@@ -347,6 +349,8 @@ class Simulator:
 
 # Device
 class Device:
+    __slots__ = ["sim", "user_path", "role", "always_active", "_components"]
+
     def __init__(self, sim, info: OxSimDeviceInfo):
         self.sim = sim
         self.user_path = info.user_path.decode()
@@ -464,6 +468,8 @@ class Device:
 
 # View
 class View:
+    __slots__ = ["sim", "index"]
+
     def __init__(self, sim, index):
         self.sim = sim
         self.index = index

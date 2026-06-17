@@ -96,8 +96,12 @@ def blender_to_openxr_quat(q):
 
 
 def vec_equal(a: Vector, b: Vector) -> float:
+    a = Vector(a)
+    b = Vector(b)
     return (a - b).length <= EPSILON
 
 
 def quat_equal(a: Quaternion, b: Quaternion) -> float:
+    a = Quaternion(a)
+    b = Quaternion(b)
     return a.rotation_difference(b).angle <= EPSILON

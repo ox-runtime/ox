@@ -179,6 +179,108 @@ def test_navigation_pose_change_is_applied():
         yield  # until the next frame
 
 
+def test_controller_grip_location_is_tracked():
+    sim = STATE["sim"]
+
+    # start xr
+    toggle_xr()
+
+    state = bpy.context.window_manager.xr_session_state
+
+    for idx, hand in enumerate(("left", "right")):
+        controller = sim.device(f"/user/hand/{hand}")
+
+        loc = state.controller_grip_location_get(bpy.context, idx)
+        expected_loc = Vector()
+        assert vec_equal(loc, expected_loc), f"{hand}: {loc} != {expected_loc}"
+
+        controller.position = Vector((10, 20, 30))
+
+        # skip a few frames
+        yield
+        yield
+
+        loc = state.controller_grip_location_get(bpy.context, idx)
+        expected_loc = openxr_to_blender_vec(controller.position)
+        assert vec_equal(loc, expected_loc), f"{hand}: {loc} != {expected_loc}"
+
+
+def test_controller_grip_rotation_is_tracked():
+    sim = STATE["sim"]
+
+    # start xr
+    toggle_xr()
+
+    state = bpy.context.window_manager.xr_session_state
+
+    for idx, hand in enumerate(("left", "right")):
+        controller = sim.device(f"/user/hand/{hand}")
+
+        rot = Quaternion(state.controller_grip_rotation_get(bpy.context, idx))
+        expected_rot = Quaternion()
+        assert quat_equal(rot, expected_rot), f"{hand}: {rot.to_euler()} != {expected_rot.to_euler()}"
+
+        controller.orientation = Quaternion((1, 1, 1), radians(30))
+
+        # skip a few frames
+        yield
+        yield
+
+        rot = Quaternion(state.controller_grip_rotation_get(bpy.context, idx))
+        expected_rot = openxr_to_blender_quat(controller.orientation)
+        assert quat_equal(rot, expected_rot), f"{hand}: {rot.to_euler()} != {expected_rot.to_euler()}"
+
+
+def test_controller_aim_location_is_tracked():
+    sim = STATE["sim"]
+
+    # start xr
+    toggle_xr()
+
+    state = bpy.context.window_manager.xr_session_state
+
+    for idx, hand in enumerate(("left", "right")):
+        controller = sim.device(f"/user/hand/{hand}")
+
+        loc = state.controller_aim_location_get(bpy.context, idx)
+        expected_loc = Vector()
+        assert vec_equal(loc, expected_loc), f"{hand}: {loc} != {expected_loc}"
+
+        controller.position = Vector((10, 20, 30))
+
+        # skip a few frames
+        yield
+        yield
+
+        loc = state.controller_aim_location_get(bpy.context, idx)
+        assert not vec_equal(loc, Vector()), f"{hand}: {loc} should not be empty"
+
+
+def test_controller_aim_rotation_is_tracked():
+    sim = STATE["sim"]
+
+    # start xr
+    toggle_xr()
+
+    state = bpy.context.window_manager.xr_session_state
+
+    for idx, hand in enumerate(("left", "right")):
+        controller = sim.device(f"/user/hand/{hand}")
+
+        rot = Quaternion(state.controller_aim_rotation_get(bpy.context, idx))
+        expected_rot = Quaternion()
+        assert quat_equal(rot, expected_rot), f"{hand}: {rot.to_euler()} != {expected_rot.to_euler()}"
+
+        controller.orientation = Quaternion((1, 1, 1), radians(30))
+
+        # skip a few frames
+        yield
+        yield
+
+        rot = Quaternion(state.controller_aim_rotation_get(bpy.context, idx))
+        assert not quat_equal(rot, Quaternion()), f"{hand}: {rot.to_euler()} should not be empty"
+
+
 if __name__ == "__main__":
     h = Harness(globals())
     h.run()
