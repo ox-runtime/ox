@@ -16,7 +16,7 @@ class Harness:
     """
     Looks for files starting with "test_", containing functions starting with "test_".
 
-    Runs tests across multiple Blender frames to ensure XR state is properly applied.
+    Runs tests across multiple Blender frames to ensure that the XR state is applied properly.
 
     This is achieved by running each test function as a generator (which yields after each frame).
 
