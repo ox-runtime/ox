@@ -5,7 +5,7 @@
 2. Download and install [ox](https://github.com/ox-runtime/ox/releases) (an OpenXR runtime that supports programmatic control of XR devices).
 
 ## Run the Tests
-1. Set the `XR_RUNTIME_JSON` environment variable to the path of the ox runtime JSON, e.g. `export XR_RUNTIME_JSON=/path/to/ox/runtime.json`.
+1. Set the `XR_RUNTIME_JSON` environment variable to the path of the ox runtime JSON, e.g. `export XR_RUNTIME_JSON=/path/to/ox/ox_runtime.json`.
 2. Set the `OX_USE_SIMULATOR` environment variable to enable the simulator, e.g. `export OX_USE_SIMULATOR=1`.
 3. Run the tests using `/path/to/blender --python /path/to/harness.py`
 
