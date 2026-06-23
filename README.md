@@ -26,6 +26,15 @@ The code is organized into multiple repositories:
 - [ox-runtime](https://github.com/ox-runtime/ox-runtime): the OpenXR runtime implementation
 - [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): a shared library that both the runtime and driver service depend on for IPC communication
 
+## Using the Runtime
+
+Set the `XR_RUNTIME_JSON` environment variable to point to the runtime manifest:
+
+* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\build\bin\ox_openxr.json`
+* **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json`
+
+Then run any OpenXR application. Please open a [new issue](https://github.com/ox-runtime/ox/issues/new) if you encounter any issues.
+
 ## Build
 
 ```bash
@@ -51,15 +60,6 @@ cmake -B build \
 	-DOX_SIM_DRIVER_REPO=/path/to/ox-sim-driver
 cmake --build build --target ox --config Release
 ```
-
-## Using the Runtime
-
-Set the `XR_RUNTIME_JSON` environment variable to point to the runtime manifest:
-
-* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\build\bin\ox_openxr.json`
-* **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json`
-
-Then run any OpenXR application. Please open a [new issue](https://github.com/ox-runtime/ox/issues/new) if you encounter any issues.
 
 ## Documentation
 
