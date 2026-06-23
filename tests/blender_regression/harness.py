@@ -17,7 +17,7 @@ class Harness:
     This way, each test can yield and continue in the next timer callback, allowing it to run across multiple frames.
     """
 
-    FRAME_INTERVAL = 1.0 / 30.0  # Run at 30 FPS
+    FRAME_INTERVAL = 1.0 / 5.0  # Run at 5 FPS
 
     def __init__(self, globals_dict):
         self.globals = globals_dict
