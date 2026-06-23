@@ -1,14 +1,3 @@
-# setup harness
-import sys
-from pathlib import Path
-
-script_dir = Path(__file__).parent.resolve()
-sys.path.append(str(script_dir))
-
-from harness import Harness
-
-# /setup harness
-
 import bpy
 
 from math import radians
@@ -211,8 +200,3 @@ def test_absolute_headset_pose_is_tracked_if_absolute_tracking_is_enabled():
 
 def test_relative_headset_pose_changes_are_tracked_if_absolute_tracking_is_disabled():
     yield from headset_absolute_tracking_test(absolute_tracking=False)
-
-
-if __name__ == "__main__":
-    h = Harness(globals())
-    h.run()

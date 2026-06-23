@@ -1,14 +1,3 @@
-# setup harness
-import sys
-from pathlib import Path
-
-script_dir = Path(__file__).parent.resolve()
-sys.path.append(str(script_dir))
-
-from harness import Harness
-
-# /setup harness
-
 import bpy
 
 from math import radians
@@ -279,8 +268,3 @@ def test_controller_aim_rotation_is_tracked():
 
         rot = Quaternion(state.controller_aim_rotation_get(bpy.context, idx))
         assert not quat_equal(rot, Quaternion()), f"{hand}: {rot.to_euler()} should not be empty"
-
-
-if __name__ == "__main__":
-    h = Harness(globals())
-    h.run()

@@ -1,15 +1,3 @@
-# setup harness
-import sys
-from pathlib import Path
-
-script_dir = Path(__file__).parent.resolve()
-sys.path.append(str(script_dir))
-
-from harness import Harness
-
-# /setup harness
-
-
 import bpy
 
 from mathutils import Vector
@@ -21,7 +9,7 @@ from common import setup_module, setup_function, teardown_function, teardown_mod
 def test_start_xr():
     wm = bpy.context.window_manager
 
-    assert wm.xr_session_state is None
+    assert wm.xr_session_state is None or not wm.xr_session_state.is_running(bpy.context)
 
     toggle_xr()
 
@@ -123,8 +111,3 @@ def test_app_timers_work_in_xr():
         yield
 
     assert False, "Timer callback was not called in XR session or context was invalid"
-
-
-if __name__ == "__main__":
-    h = Harness(globals())
-    h.run()

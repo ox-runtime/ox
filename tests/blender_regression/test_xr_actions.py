@@ -1,22 +1,7 @@
-# setup harness
-import sys
-from pathlib import Path
-from typing import Union
-
-script_dir = Path(__file__).parent.resolve()
-sys.path.append(str(script_dir))
-
-from harness import Harness
-
-# /setup harness
-
-
 import bpy
 
-from mathutils import Vector
 from dataclasses import dataclass
-
-from ox_sim import Simulator
+from typing import Union
 
 from common import toggle_xr
 from common import (
@@ -270,8 +255,3 @@ def get_call_index(expected_call):
         if btn == exp_btn and value == exp_value and abs(state - exp_state) < 0.001:
             return i
     return -1
-
-
-if __name__ == "__main__":
-    h = Harness(globals())
-    h.run()

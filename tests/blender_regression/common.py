@@ -45,7 +45,9 @@ def setup_function():
 
     # stop a running xr session before starting the next test
     if wm.xr_session_state is not None and wm.xr_session_state.is_running(bpy.context):
+        print("Stopping running XR session before starting next test")
         toggle_xr()
+        print("Stopped")
 
 
 def teardown_function():
