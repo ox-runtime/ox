@@ -1,8 +1,8 @@
 # ox
 
-**WORK-IN-PROGRESS** - This is still a prototype and is not (yet) fully compliant with the OpenXR spec.
+**WORK-IN-PROGRESS** - This is still heavily under-development and is not (yet) fully compliant with the OpenXR spec.
 
-**ox** is a simple and lightweight OpenXR runtime for Windows, Linux and Mac. It supports OpenGL, Vulkan and Metal.
+**ox** is a simple, lightweight, cross-platform OpenXR runtime for Windows, Linux and Mac. It supports OpenGL, Vulkan and Metal.
 
 The primary purpose of **ox** is automated testing of OpenXR applications. It comes with a [virtual OpenXR device](https://github.com/ox-runtime/ox-simulator) which can be controlled programmatically (e.g. press a button, move the headset etc). The effect of these actions can then be verified in the OpenXR application that you're testing.
 
@@ -12,17 +12,17 @@ The primary purpose of **ox** is automated testing of OpenXR applications. It co
 Download ox from the [latest release](https://github.com/ox-runtime/ox/releases).
 
 ox can be used in three ways:
-- [GUI](docs/gui.md) (by running `ox.exe` or `./ox`).
-- [REST API](docs/rest_api.md) (by accessing `http://localhost:8765/` after running ox).
-- Directly inside your test code (by setting the `XR_RUNTIME_JSON` and `OX_USE_SIMULATOR=1` environment variables).
+- Directly inside your test code and application process - Useful for automated testing (including CI runners).
+- [GUI](docs/gui.md) - Useful for development and live testing.
+- [REST API](docs/rest_api.md) - Useful for agentic development.
 
-Here's an example for automatically testing [Blender's XR mode](docs/blender_tests_example.md).
+Here's an example for automatically testing [Blender's XR mode](https://github.com/cmdr2/blender-xr-regression-tests).
 
 ## Code
 
 The code is organized into multiple repositories:
-- [ox](https://github.com/ox-runtime/ox) (this repo): the host executable and CMake build orchestration
-- [ox-sim-driver](https://github.com/ox-runtime/ox-sim-driver): the simulator GUI and C API for controlling the virtual device programmatically
+- [ox](https://github.com/ox-runtime/ox) (this repo): bundles the core sub-repos into a single build.
+- [ox-sim-driver](https://github.com/ox-runtime/ox-sim-driver): the simulator GUI and C API (plus wrappers) for controlling the virtual device programmatically
 - [ox-runtime](https://github.com/ox-runtime/ox-runtime): the OpenXR runtime implementation
 - [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): a shared library that both the runtime and driver service depend on for IPC communication
 
