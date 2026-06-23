@@ -14,14 +14,14 @@ import bpy
 
 from mathutils import Vector
 
-from common import vec_equal
+from common import vec_equal, toggle_xr
 from common import setup_module, setup_function, teardown_function, teardown_module, STATE
 
 
 def test_start_xr():
     wm = bpy.context.window_manager
 
-    assert bpy.context.window_manager.xr_session_state is None
+    assert wm.xr_session_state is None
 
     toggle_xr()
 
@@ -32,7 +32,7 @@ def test_start_xr():
 def test_restart_xr():
     wm = bpy.context.window_manager
 
-    assert bpy.context.window_manager.xr_session_state is None
+    assert wm.xr_session_state is None
 
     for i in range(3):  # start, stop, start
         toggle_xr()
@@ -123,14 +123,6 @@ def test_app_timers_work_in_xr():
         yield
 
     assert False, "Timer callback was not called in XR session or context was invalid"
-
-
-# utilities
-def toggle_xr():
-    area = next((a for a in bpy.context.screen.areas if a.type == "VIEW_3D"), None)
-
-    with bpy.context.temp_override(area=area):
-        bpy.ops.wm.xr_session_toggle()
 
 
 if __name__ == "__main__":
