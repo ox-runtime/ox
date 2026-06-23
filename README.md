@@ -56,17 +56,10 @@ cmake --build build --target ox --config Release
 
 Set the `XR_RUNTIME_JSON` environment variable to point to the runtime manifest:
 
-**Windows:**
-```batch
-set XR_RUNTIME_JSON=C:\path\to\ox\build\bin\ox_openxr.json
-```
+* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\build\bin\ox_openxr.json`
+* **Linux:** `export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json`
 
-**Linux:**
-```bash
-export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json
-```
-
-Then run any OpenXR application.
+Then run any OpenXR application. Please open a [new issue](/issues/new) if you encounter any issues.
 
 ## Documentation
 
