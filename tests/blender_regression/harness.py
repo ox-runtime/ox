@@ -36,7 +36,7 @@ class Harness:
 
     def _discover_tests(self):
         self.tests = [t for t in self.globals.values() if callable(t) and t.__name__.startswith("test_")]
-        print(f"Discovered {len(self.tests)} tests")
+        self._log(f"Discovered {len(self.tests)} tests")
         self.tests = iter(self.tests)
 
         for fixture in self.fixtures.keys():
@@ -65,7 +65,7 @@ class Harness:
         # START_MODULE -> [GET_NEXT_TEST -> START_TEST -> RUN_GENERATOR -> STOP_TEST -> GET_NEXT_TEST] -> END_MODULE
         try:
             if self.state == "START_MODULE":
-                self._show_toast("Starting tests..")
+                self._log("Starting tests..")
                 self.fixtures["setup_module"]()
                 self.state = "GET_NEXT_TEST"
 
@@ -74,9 +74,8 @@ class Harness:
                 self.state = "START_TEST" if self.curr_test_fn else "END_MODULE"
 
             elif self.state == "START_TEST":
+                self._log(f"Starting test: {self.curr_test_fn.__name__}")
                 self.fixtures["setup_function"]()
-                print(f"Starting test: {self.curr_test_fn.__name__}")
-                self._show_toast(f"Starting test: {self.curr_test_fn.__name__}")
                 try:
                     self.curr_test_gen = self.curr_test_fn()  # start the generator fn
 
@@ -105,7 +104,7 @@ class Harness:
 
             elif self.state == "END_MODULE":
                 self._print_results()
-                self._show_toast("Test complete! Check the console for results.")
+                self._log("Test complete! Check the console for results.")
                 self.fixtures["teardown_module"]()
                 bpy.ops.wm.quit_blender()
                 return
@@ -117,11 +116,9 @@ class Harness:
 
         return Harness.FRAME_INTERVAL
 
-    def _show_toast(self, message):
-        def draw(self, context):
-            self.layout.label(text=message)
-
-        bpy.context.window_manager.popup_menu(draw, title="Test")
+    def _log(self, message):
+        print(message)
+        bpy.context.workspace.status_text_set(message)
 
     def run(self):
         self._discover_tests()
