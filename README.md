@@ -12,7 +12,7 @@ The primary purpose of **ox** is automated testing of OpenXR applications. It co
 Download ox from the [latest release](https://github.com/ox-runtime/ox/releases).
 
 ox can be used in three ways:
-- [In-Process](docs/inside_the_process.md) - Directly inside your application process and testing framework. Useful for automated testing (including CI runners).
+- [In-Process](docs/inside_the_process.md) - Inside your application process and testing framework. Useful for automated testing (including CI runners).
 - [GUI](docs/gui.md) - Useful for development and live testing.
 - [REST API](docs/rest_api.md) - Useful for agentic development, or when you can't use the in-process API.
 
@@ -30,8 +30,8 @@ The code is organized into multiple repositories:
 
 Set the `XR_RUNTIME_JSON` environment variable to point to the runtime manifest:
 
-* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\build\bin\ox_openxr.json`
-* **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/build/bin/ox_openxr.json`
+* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\ox_openxr.json`
+* **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/ox_openxr.json`
 
 Then run any OpenXR application. Please open a [new issue](https://github.com/ox-runtime/ox/issues/new) if you encounter any issues.
 

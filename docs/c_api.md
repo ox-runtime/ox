@@ -1,6 +1,6 @@
 # C API
 
-The simulator exports a C API from the same shared library that provides the `ox_driver_register` entry point used by `ox-runtime`.
+The simulator exports a C API that applications can use to interact with the simulator.
 
 - Public header: https://github.com/ox-runtime/ox-sim-driver/blob/main/include/ox_sim.h
 - Example C++ client: https://github.com/ox-runtime/ox-sim-driver/blob/main/examples/simulator_api_example.cpp
