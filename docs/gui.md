@@ -1,5 +1,7 @@
 # ox-simulator GUI Reference
 
+See the headset's view and control the devices visually in a GUI window. Useful for development and live testing.
+
 <img height="400" alt="image" src="https://github.com/user-attachments/assets/e2b888d6-2295-4aa7-8aa0-be7f1b620c08" />
 
 ## Usage

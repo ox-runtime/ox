@@ -1,33 +1,26 @@
 # ox
 
-**ox** is a simple, lightweight, cross-platform OpenXR runtime for Windows, Linux and Mac. It supports OpenGL, Vulkan and Metal.
+**ox** is a new lightweight and cross-platform OpenXR runtime for Windows, Linux and Mac. It supports OpenGL, Vulkan and Metal.
 
-The primary purpose of **ox** is automated testing of OpenXR applications using a virtual OpenXR device.
+The primary purpose of **ox** is automated testing of OpenXR applications using a virtual OpenXR device. It is useful during development and CI testing.
 
-The virtual device can be controlled programmatically (e.g. press a button, move the headset, read screen texture etc), and you can use your existing testing framework.
+You can control the virtual device programmatically (e.g. press a button, move the headset, read screen texture etc), and integrate it with your existing test framework and code.
 
-⚠️ **WORK-IN-PROGRESS!** - This is still heavily under-development and is not (yet) fully compliant with the OpenXR spec.
+> [!WARNING]
+> **WORK-IN-PROGRESS** - **ox** is still heavily under-development and is not (yet) fully compliant with the OpenXR spec.
 
-<img height="400" alt="image" src="https://github.com/user-attachments/assets/e2b888d6-2295-4aa7-8aa0-be7f1b620c08" />
-
-## Getting Started
-1. Download ox from the [latest release](https://github.com/ox-runtime/ox/releases).
-
-2. ox can be used in three ways. Click to get started with your preferred method:
-    - [In-Process](docs/inside_the_process.md) - Inside your application process and testing framework. Useful for automated testing (including CI runners).
-    - [GUI](docs/gui.md) - Useful for development and live testing.
-    - [REST API](docs/rest_api.md) - Useful for agentic development, or when you can't use the in-process API.
-
-Here's an example of how `ox` can be used for automatically testing [Blender's XR mode](https://github.com/cmdr2/blender-xr-regression-tests).
+## Get Started
+Click to use **ox** for:
+* [Automated Testing](docs/automated_testing.md) - Use **ox** inside your application and testing framework. Useful for automated testing (including CI runners).
+* [GUI](docs/gui.md) - See the headset's view and control the devices visually in a GUI window. Useful for development and live testing.
+* [REST API](docs/rest_api.md) - Control the virtual device over HTTP. Useful for agentic development, or when you can't use the in-process API.
 
 ## Using the Runtime
 
-Set the `XR_RUNTIME_JSON` environment variable to point to the runtime manifest:
+Set the `XR_RUNTIME_JSON` environment variable, or use the [GUI](docs/gui.md) to set **ox** as the default OpenXR runtime.
 
 * **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\ox_openxr.json`
 * **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/ox_openxr.json`
-
-Or use the [GUI](docs/gui.md) to set `ox` as the default OpenXR runtime.
 
 Then run any OpenXR application. Please open a [new issue](https://github.com/ox-runtime/ox/issues/new) if you encounter any issues.
 
@@ -41,6 +34,14 @@ The code is organized into the following repositories:
 - [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): decouples the application process from the XR device, with an IPC proxy. Used by the GUI and REST API.
 
 ### Build
+1. (Linux-only) Install platform dependencies:
+
+```bash
+# Ubuntu / Debian
+sudo apt-get update
+sudo apt-get install -y libgl1-mesa-dev libxcb-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libpng-dev pkg-config
+```
+2. Configure and build:
 
 ```bash
 cmake -B build
@@ -68,10 +69,10 @@ cmake --build build --target ox --config Release
 
 ## Documentation
 
-- [Simulator In-Process API reference](docs/inside_the_process.md)
-- [Simulator GUI reference](docs/gui.md)
-- [Simulator REST API reference](docs/rest_api.md)
-- [Simulator C API reference](docs/c_api.md)
+- [Automated Testing](docs/automated_testing.md)
+- [GUI](docs/gui.md)
+- [REST API](docs/rest_api.md)
+- [C API](docs/c_api.md)
 
 ## References
 

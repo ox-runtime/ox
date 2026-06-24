@@ -1,8 +1,17 @@
 # REST API
 
-The simulator exposes a local REST API for automation and inspection.
+The simulator exposes a local REST API for automation and inspection. Control the virtual device over HTTP. Useful for agentic development, or when you can't use the in-process API.
 
 - URL: `http://127.0.0.1:8765`
+
+## Short Summary
+```
+GET      /v1/status                 - Session state and app FPS
+GET/PUT  /v1/profile                - Get/switch device profile
+GET/PUT  /v1/devices/<user_path>    - Get/set device state
+GET/PUT  /v1/inputs/<binding_path>  - Get/set typed input state
+GET      /v1/views/<eye>            - Eye texture (PNG), eye=0 or 1
+```
 
 ## Session Status
 
