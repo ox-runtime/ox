@@ -2,7 +2,9 @@
 
 **ox** is a simple, lightweight, cross-platform OpenXR runtime for Windows, Linux and Mac. It supports OpenGL, Vulkan and Metal.
 
-The primary purpose of **ox** is automated testing of OpenXR applications. It comes with a [virtual OpenXR device](https://github.com/ox-runtime/ox-simulator) which can be controlled programmatically (e.g. press a button, move the headset etc). The effect of these actions can then be verified in the OpenXR application that you're testing.
+The primary purpose of **ox** is automated testing of OpenXR applications using a virtual OpenXR device.
+
+The virtual device can be controlled programmatically (e.g. press a button, move the headset, read screen texture etc), and you can use your existing testing framework.
 
 ⚠️ **WORK-IN-PROGRESS!** - This is still heavily under-development and is not (yet) fully compliant with the OpenXR spec.
 
