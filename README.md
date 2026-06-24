@@ -16,7 +16,7 @@ ox can be used in three ways:
 - [GUI](docs/gui.md) - Useful for development and live testing.
 - [REST API](docs/rest_api.md) - Useful for agentic development, or when you can't use the in-process API.
 
-Here's how `ox` can be used for automatically testing [Blender's XR mode](https://github.com/cmdr2/blender-xr-regression-tests).
+Here's an example of how `ox` can be used for automatically testing [Blender's XR mode](https://github.com/cmdr2/blender-xr-regression-tests).
 
 ## Code
 
