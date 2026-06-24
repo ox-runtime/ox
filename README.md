@@ -12,11 +12,11 @@ The primary purpose of **ox** is automated testing of OpenXR applications. It co
 Download ox from the [latest release](https://github.com/ox-runtime/ox/releases).
 
 ox can be used in three ways:
-- Directly inside your test code and application process - Useful for automated testing (including CI runners).
+- [In-Process](docs/inside_the_process.md) - Directly inside your application process and testing framework. Useful for automated testing (including CI runners).
 - [GUI](docs/gui.md) - Useful for development and live testing.
-- [REST API](docs/rest_api.md) - Useful for agentic development.
+- [REST API](docs/rest_api.md) - Useful for agentic development, or when you can't use the in-process API.
 
-Here's an example for automatically testing [Blender's XR mode](https://github.com/cmdr2/blender-xr-regression-tests).
+Here's how `ox` can be used for automatically testing [Blender's XR mode](https://github.com/cmdr2/blender-xr-regression-tests).
 
 ## Code
 
@@ -63,6 +63,7 @@ cmake --build build --target ox --config Release
 
 ## Documentation
 
+- [Simulator In-Process API reference](docs/inside_the_process.md)
 - [Simulator GUI reference](docs/gui.md)
 - [Simulator REST API reference](docs/rest_api.md)
 - [Simulator C API reference](docs/c_api.md)
