@@ -23,12 +23,12 @@ Click to use ox for:
 ## News
 See the [releases](https://github.com/ox-runtime/ox/releases) page for more fine-grained releases.
 
-- 30 Jun 2026 - v0.7 - released a regression test suite for Blender's XR API. [[more...](https://github.com/cmdr2/blender-xr-regression-tests)]
-- 21 May 2026 - v0.7 - ox now has a Python wrapper for easier in-process testing. [[more...](docs/automated_testing.md)]
-- 9 Apr 2026 - v0.6 - ox now supports XR testing fully within the application process (i.e. no IPC). Also releases a re-designed GUI, and additional release formats: dmg, Windows Installer, AppImage, flatpak and snap.
-- 10 Mar 2026 - v0.5 - ox now supports Metal, and live preview in the Simulator GUI window.
-- 31 Jan 2026 - v0.4 - ox now supports Vulkan (versions 1.0 to 1.3).
-- 28 Jan 2026 - v0.3 - First public version of ox released, with a simulator GUI and REST API. Supports OpenGL on Windows, Linux and macOS.
+- 2026/06/30 - v0.7 - released a regression test suite for Blender's XR API. [[more...](https://github.com/cmdr2/blender-xr-regression-tests)]
+- 2026/05/21 - v0.7 - ox now has a Python wrapper for easier in-process testing. [[more...](docs/automated_testing.md)]
+- 2026/04/09 - v0.6 - ox now supports XR testing fully within the application process (i.e. no IPC). Also releases a re-designed GUI, and additional release formats: dmg, Windows Installer, AppImage, flatpak and snap.
+- 2026/03/10 - v0.5 - ox now supports Metal, and live preview in the Simulator GUI window.
+- 2026/01/31 - v0.4 - ox now supports Vulkan (versions 1.0 to 1.3).
+- 2026/01/28 - v0.3 - First public version of ox released, with a simulator GUI and REST API. Supports OpenGL on Windows, Linux and macOS.
 
 ## [Development](docs/development.md)
 
