@@ -4,7 +4,7 @@ ox allows you to add support for real DIY/mainstream headsets and controllers us
 
 This is a power-user feature, meant for developers working with real DIY/mainstream hardware.
 
-**Note:** Don't write a driver if you just want to simulate your hardware in the simulator - add that to the simulator's list of [device profiles](https://github.com/ox-runtime/ox-sim-driver/blob/main/src/device_profiles.cpp) instead.
+**Note:** Don't write a driver if you just want to simulate your hardware in the simulator - add that to the simulator's list of [device profiles](https://github.com/ox-runtime/ox-sim-driver/blob/main/src/device_profiles.hpp) instead.
 
 > [!TIP]
 > Fun fact: the simulator is also just a driver for ox, called [ox-sim-driver](https://github.com/ox-runtime/ox-sim-driver). It shows the rendered pixels in a GUI window and sends your simulator inputs back as device inputs.
