@@ -1,29 +1,27 @@
 # Automated Testing
 
-Test your OpenXR application with a virtual XR device, using your existing testing framework.
-
-In this configuration, the ox runtime will run inside your application process. This lets you to keep your tests focused on the application logic, without including the additional complexity of cross-process communication in your test path.
+Test your OpenXR application with a virtual XR device, using your existing test framework.
 
 ## Setup
 1. Download [ox](https://github.com/ox-runtime/ox/releases).
-2. Get one of the wrappers to communicate with the virtual XR device in your tests:
-- Python: [ox_sim.py](https://github.com/ox-runtime/ox-sim-driver/tree/main/wrappers/python)
-- C: [ox_sim.h](https://github.com/ox-runtime/ox/blob/main/docs/c_api.md)
-
-Please see the respective wrapper documentation for writing tests in that language.
+2. Follow the guide for the language your tests are written in:
+    - [Python](https://github.com/ox-runtime/ox-sim-driver/tree/main/wrappers/python)
+    - [C](https://github.com/ox-runtime/ox/blob/main/docs/c_api.md)
 
 ## Run the Tests
 1. Set the `XR_RUNTIME_JSON` environment variable to point to the runtime manifest:
 
-* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\ox_openxr.json`
-* **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/ox_openxr.json`
+    * **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\ox_openxr.json`
+    * **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/ox_openxr.json`
 
-2. Set `OX_USE_SIMULATOR=1` to enable the virtual XR device:
+2. Set `OX_USE_SIMULATOR` to enable the virtual XR device:
 
-* **Windows:** `set OX_USE_SIMULATOR=1`
-* **Linux/macOS:** `export OX_USE_SIMULATOR=1`
+    * **Windows:** `set OX_USE_SIMULATOR=1`
+    * **Linux/macOS:** `export OX_USE_SIMULATOR=1`
 
-3. Run your tests using your regular testing framework, e.g. `python -m pytest`.
+3. Run your tests using your regular testing framework (e.g. `python -m pytest`).
+
+**Note**: In this configuration, the ox runtime will run inside your application process. This keeps your tests focused on your application logic, without the additional variability of inter-process communication (IPC) in your testing path.
 
 ## Example
 

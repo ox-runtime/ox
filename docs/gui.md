@@ -1,22 +1,28 @@
-# ox-simulator GUI Reference
+# GUI
 
 See the headset's view and control the devices visually in a GUI window. Useful for development and live testing.
 
 <img height="400" alt="image" src="https://github.com/user-attachments/assets/e2b888d6-2295-4aa7-8aa0-be7f1b620c08" />
 
+## Setup
+1. Download [ox](https://github.com/ox-runtime/ox/releases).
+
 ## Usage
 
-Run `ox.exe` (Windows) or `./ox` (Linux/macOS) to launch the simulator GUI.
+1. Run `ox.exe` (Windows) or `./ox` (Linux/macOS) to launch the simulator GUI.
+2. Set the `XR_RUNTIME_JSON` environment variable, or click `Set as OpenXR Runtime` in the GUI to set ox as the default OpenXR runtime.
+    * **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\ox_openxr.json`
+    * **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/ox_openxr.json`
 
-## Overview
+Then run any OpenXR application, and interact with it using the GUI. Please open a [new issue](https://github.com/ox-runtime/ox/issues/new) if you encounter any issues.
+
+## Documentation
 
 The simulator GUI is divided into three areas:
 
 - **Top toolbar** - runtime registration, API server controls, and simulated device selection
 - **Preview panel** (left) - live eye texture feed from the connected OpenXR application
 - **Sidebar** (right) - per-device pose and input controls; drag the splitter to resize
-
----
 
 ## Top Toolbar
 
@@ -29,8 +35,6 @@ The top toolbar contains the global controls that affect the whole simulator ses
 | **API Server** toggle | Starts or stops the local HTTP API server on port `8765`. |
 | **Copy API URL** | Copies the API base URL, `http://127.0.0.1:8765`, to the clipboard. |
 | **Simulated Device** | Switches the active device profile, for example Quest 2, Quest 3, Vive, Index, or Vive Tracker. |
-
----
 
 ## Preview Panel
 
@@ -53,8 +57,6 @@ The top-left of the preview toolbar shows whether an OpenXR session is currently
 ### Copy to clipboard
 
 Click the copy button overlaid in the top-right corner of the preview image to copy the current eye texture view as an image. In **Both** mode a side-by-side composite is copied.
-
----
 
 ## Head Pose Navigation
 
@@ -93,8 +95,6 @@ Arrow-key pitch/yaw matches mouse-look and ignores the viewer's current roll. `Q
 | `Q` | Roll left around the view forward axis |
 | `E` | Roll right around the view forward axis |
 
----
-
 ## Sidebar - Device Panels
 
 Each device (HMD, controllers, trackers) has its own panel in the sidebar. Scroll down to see all devices.
@@ -113,8 +113,6 @@ Each device (HMD, controllers, trackers) has its own panel in the sidebar. Scrol
 Boolean (button) inputs are shown as toggle switches. Float inputs are shown as sliders.
 
 Trigger and squeeze-style float inputs also include a small filled-circle hold button next to the slider. Pressing and holding it ramps the value to `1.0` over `300 ms`, keeps it pinned at `1.0` while held, and releases it back to `0.0` over `100 ms` when released. Thumbstick and trackpad axes continue to use standard sliders only.
-
----
 
 ## Status Bar
 

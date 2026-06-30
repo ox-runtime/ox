@@ -1,15 +1,20 @@
 # REST API
 
-The simulator exposes a local REST API for automation and inspection. Control the virtual device over HTTP. Useful for agentic development, or when you can't use the in-process API.
+The simulator exposes a local REST API for automation and inspection. This allows you to control the virtual XR device over HTTP. Useful for agentic development, or when you can't use the in-process API.
 
-- URL: `http://127.0.0.1:8765`
+## Setup
+1. Download [ox](https://github.com/ox-runtime/ox/releases).
+2. Start the simulator GUI and set the XR runtime by following [these instructions](gui.md).
+3. Enable the `API Server` toggle in the GUI.
 
 ## Short Summary
+- **URL:** `http://127.0.0.1:8765`
+
 ```
 GET      /v1/status                 - Session state and app FPS
 GET/PUT  /v1/profile                - Get/switch device profile
 GET/PUT  /v1/devices/<user_path>    - Get/set device state
-GET/PUT  /v1/inputs/<binding_path>  - Get/set typed input state
+GET/PUT  /v1/inputs/<binding_path>  - Get/set typed input state. Full path required (including user_path).
 GET      /v1/views/<eye>            - Eye texture (PNG), eye=0 or 1
 ```
 

@@ -2,77 +2,39 @@
 
 **ox** is a new lightweight and cross-platform OpenXR runtime for Windows, Linux and Mac. It supports OpenGL, Vulkan and Metal.
 
-The primary purpose of **ox** is automated testing of OpenXR applications using a virtual OpenXR device. It is useful during development and CI testing.
+The primary purpose of ox is automated testing of OpenXR applications using a virtual OpenXR device. It is useful during development and CI testing.
 
-You can control the virtual device programmatically (e.g. press a button, move the headset, read screen texture etc), and integrate it with your existing test framework and code.
+You can control a virtual XR device programmatically (e.g. press a button, move the headset, read screen texture etc), and integrate it with your existing test framework and code.
+
+ox simulates Meta Quest, HTC Vive Trackers, Valve Index and other popular headsets.
 
 > [!WARNING]
-> **WORK-IN-PROGRESS** - **ox** is still heavily under-development and is not (yet) fully compliant with the OpenXR spec.
+> **WORK-IN-PROGRESS** - ox is still heavily under-development and is not (yet) fully compliant with the OpenXR spec.
+
+<img height="100" alt="different ways of using ox: automated testing, GUI, REST API" src="https://github.com/user-attachments/assets/22dc60eb-cba2-4353-abf2-e09b215fca6e" />
 
 ## Get Started
-Click to use **ox** for:
-* [Automated Testing](docs/automated_testing.md) - Use **ox** inside your application and testing framework. Useful for automated testing (including CI runners).
-* [GUI](docs/gui.md) - See the headset's view and control the devices visually in a GUI window. Useful for development and live testing.
-* [REST API](docs/rest_api.md) - Control the virtual device over HTTP. Useful for agentic development, or when you can't use the in-process API.
 
-## Using the Runtime
+Click to use ox for:
+* [Automated Testing](docs/automated_testing.md) - Use virtual XR devices inside your application and test framework. Useful for automated testing (including CI runners).
+* [GUI](docs/gui.md) - Preview the headset's output and control the devices visually in a GUI window. Useful for development and live testing.
+* [REST API](docs/rest_api.md) - Control the virtual XR device over HTTP. Useful for agentic development, or when you can't use the in-process API.
 
-Set the `XR_RUNTIME_JSON` environment variable, or use the [GUI](docs/gui.md) to set **ox** as the default OpenXR runtime.
+## News
+Headline releases only. See the [releases](https://github.com/ox-runtime/ox/releases) page for fine-grained releases.
 
-* **Windows:** `set XR_RUNTIME_JSON=C:\path\to\ox\ox_openxr.json`
-* **Linux/macOS:** `export XR_RUNTIME_JSON=/path/to/ox/ox_openxr.json`
+- 30 Jun 2026 - v0.7 - Regression test suite for Blender's XR API. [[more...](https://github.com/cmdr2/blender-xr-regression-tests)]
+- 21 May 2026 - v0.7 - Python wrapper for in-process testing. [[more...](docs/automated_testing.md)]
+- 9 Apr 2026 - v0.6 - In-Process Simulator C-API. Redesigned GUI. Additional release formats: dmg, Windows Installer, AppImage, flatpak and snap.
+- 10 Mar 2026 - v0.5 - Metal support. Live preview in the Simulator GUI window.
+- 31 Jan 2026 - v0.4 - Vulkan support (versions 1.0 to 1.3).
+- 28 Jan 2026 - v0.3 - First release of ox with a simulator GUI and REST API. Supports OpenGL on Windows, Linux and macOS.
 
-Then run any OpenXR application. Please open a [new issue](https://github.com/ox-runtime/ox/issues/new) if you encounter any issues.
+## [Development](docs/development.md)
 
-## Development
-### Code
+## [Documentation](docs/README.md)
 
-The code is organized into the following repositories:
-- [ox](https://github.com/ox-runtime/ox) (this repo): bundles the core sub-repos into a single build.
-- [ox-sim-driver](https://github.com/ox-runtime/ox-sim-driver): the simulator GUI and C API (plus wrappers) for controlling the virtual device programmatically.
-- [ox-runtime](https://github.com/ox-runtime/ox-runtime): the OpenXR runtime implementation.
-- [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): decouples the application process from the XR device, with an IPC proxy. Used by the GUI and REST API.
-
-### Build
-1. (Linux-only) Install platform dependencies:
-
-```bash
-# Ubuntu / Debian
-sudo apt-get update
-sudo apt-get install -y libgl1-mesa-dev libxcb-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libpng-dev pkg-config
-```
-2. Configure and build:
-
-```bash
-cmake -B build
-cmake --build build --config Release
-```
-
-The build will be produced in `./build/bin/`.
-
-#### Working with local checkouts
-By default, the top-level CMake build fetches the sub-project repos with `FetchContent`. To work against local repo clones instead, pass any of these build-time flags:
-
-- `OX_RUNTIME_REPO`
-- `OX_IPC_PROXY_REPO`
-- `OX_SIM_DRIVER_REPO`
-
-For e.g. to build against local clones of all three repos:
-
-```bash
-cmake -B build \
-	-DOX_RUNTIME_REPO=/path/to/ox-runtime \
-	-DOX_IPC_PROXY_REPO=/path/to/ox-ipc-proxy \
-	-DOX_SIM_DRIVER_REPO=/path/to/ox-sim-driver
-cmake --build build --target ox --config Release
-```
-
-## Documentation
-
-- [Automated Testing](docs/automated_testing.md)
-- [GUI](docs/gui.md)
-- [REST API](docs/rest_api.md)
-- [C API](docs/c_api.md)
+## [FAQ](docs/faq.md)
 
 ## References
 
