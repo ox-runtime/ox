@@ -24,9 +24,6 @@ ox supports Windows, Linux and Mac from day one (including 13 year old Intel Mac
 
 **ox** is open source, provides programmatic control, and allows you to simulate any device (even custom ones). ox provides an interactive GUI window (similar to Meta Simulator).
 
-## Why not Zoidberg?
-Sorry :) `(\/)` `(\/)`
-
 ## I see code written by AI. Is this AI Slop?
 No. I've worked on this codebase for months, and I use AI the way an experienced carpenter uses power tools (instead of drilling/sawing everything by hand). I've been a professional programmer for over 25 years, and I mercilessly review and edit every character that *I* ship (regardless of who wrote it).
 
