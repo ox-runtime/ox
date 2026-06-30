@@ -4,7 +4,7 @@
 
 The primary focus of ox is easy automated testing of OpenXR apps, and programmatic simulation of popular XR devices.
 
-While the architecture allows users to add support for real DIY/mainstream headsets and controllers, that is not the primary focus for now.
+While the architecture [allows users](drivers.md) to add support for real DIY/mainstream headsets and controllers, that is not the primary focus for now.
 
 **ox** is mainly meant as a tool for OpenXR app developers. It is currently not a replacement for Monado, SteamVR or Link.
 
