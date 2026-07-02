@@ -8,6 +8,61 @@ The code is organized into the following repositories:
 - [ox-runtime](https://github.com/ox-runtime/ox-runtime): the OpenXR runtime implementation.
 - [ox-ipc-proxy](https://github.com/ox-runtime/ox-ipc-proxy): proxies driver calls over IPC. decouples the application process from the XR device driver. Used by the GUI and REST API.
 
+## Design
+### Single-Process Mode
+* **Used for:** Automated Testing
+* **Process:** XR app process (e.g. Blender) loads the XR driver directly
+
+```mermaid
+flowchart LR
+    App["XR app process<br/>(e.g. Blender)"]
+    Loader["OpenXR Loader"]
+    Runtime["ox-runtime"]
+    Driver["ox-sim-driver"]
+
+    App -->|Gets loader| Loader
+    Loader -->|Load runtime| Runtime
+    Runtime -->|Load driver| Driver
+
+    Driver <-. Test code gets/sets simulator state .-> App
+
+    click Runtime "https://github.com/ox-runtime/ox-runtime" "Open ox-runtime"
+    click Driver "https://github.com/ox-runtime/ox-sim-driver" "Open ox-sim-driver"
+```
+
+### Split-Process Mode:
+* **Used for:** GUI and REST API
+* **Process 1:** XR app process (e.g. Blender)
+* **Process 2:** [ox](https://github.com/ox-runtime/ox) host process, loads the XR driver
+* **Communication channel:** IPC
+
+```mermaid
+flowchart LR
+    App["XR app process<br/>(e.g. Blender)"]
+    Loader["OpenXR Loader"]
+    Runtime["ox-runtime"]
+    Client["ox-ipc-client"]
+    Server["ox-ipc-server"]
+    Host["ox host process"]
+    Driver["ox-sim-driver"]
+    UI["GUI / REST Client / Agent"]
+
+    App -->|Gets loader| Loader
+    Loader -->|Load runtime| Runtime
+    Runtime -->|Load driver| Client
+    Client <-..->|IPC| Server
+    Host --> |Load| Server
+    Server -->|Load driver| Driver
+
+    UI <-..-> Driver
+
+    click Runtime "https://github.com/ox-runtime/ox-runtime" "Open ox-runtime"
+    click Driver "https://github.com/ox-runtime/ox-sim-driver" "Open ox-sim-driver"
+    click Client "https://github.com/ox-runtime/ox-ipc-proxy" "Open ox-ipc-client"
+    click Server "https://github.com/ox-runtime/ox-ipc-proxy" "Open ox-ipc-server"
+    click Host "https://github.com/ox-runtime/ox" "Open ox host"
+```
+
 ## Build
 1. (Linux-only) Install platform dependencies:
 
