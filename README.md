@@ -23,7 +23,7 @@ Click to use ox for:
 * [REST API](docs/rest_api.md) - Control the virtual XR device over HTTP. Useful for agentic development, or when you can't use the in-process API.
 
 ## News
-See the [releases](https://github.com/ox-runtime/ox/releases) page for more fine-grained releases.
+See the [releases](https://github.com/ox-runtime/ox/releases) page for fine-grained release notes.
 
 - 2026/06/30 - v0.7 - released a regression test suite for Blender's XR API. [[more...](https://github.com/cmdr2/blender-xr-regression-tests)]
 - 2026/05/21 - v0.7 - ox now has a Python wrapper for easier in-process testing. [[more...](docs/automated_testing.md)]
