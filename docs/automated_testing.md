@@ -21,7 +21,7 @@ In this configuration, the ox runtime and simulator will run inside your applica
 * [Testing with C](automated_testing.md#testing-with-c)
 
 ## Testing with Python
-You can write your tests using any testing framework (for e.g. pytest), and run them in the usual way (for e.g. `python -m pytest`).
+You can write your tests using any testing framework for Python (for e.g. pytest), and run them in the usual way (for e.g. `python -m pytest`).
 
 Here's a quick start guide. Please check the [documentation](https://github.com/ox-runtime/ox-sim-driver/tree/main/wrappers/python) for a complete reference to `ox_sim.py`.
 
@@ -88,7 +88,7 @@ def test_foo():
 ```
 
 ## Testing with C
-You can write your tests using any testing framework, and compile and run them in the usual way.
+You can write your tests using any testing framework for C, and compile and run them in the usual way.
 
 Here's a quick start guide. Please check the [documentation](https://github.com/ox-runtime/ox-sim-driver/tree/main/include) for a complete reference to `ox_sim.h`.
 
