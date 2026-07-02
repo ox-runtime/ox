@@ -90,7 +90,7 @@ def test_foo():
 ### Testing with C
 You can write your tests using any testing framework, and compile and run them in the usual way.
 
-Here's a quick start guide. Please check the [documentation](https://github.com/ox-runtime/ox/blob/main/docs/c_api.md) for a complete reference to `ox_sim.h`.
+Here's a quick start guide. Please check the [documentation](https://github.com/ox-runtime/ox-sim-driver/tree/main/include) for a complete reference to `ox_sim.h`.
 
 1. Download [ox_sim.h](https://github.com/ox-runtime/ox-sim-driver/blob/main/include/ox_sim.h) into your project.
 
