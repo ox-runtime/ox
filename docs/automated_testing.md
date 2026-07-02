@@ -41,7 +41,7 @@ right_controller = sim.device('/user/hand/right')
 4. Set the position and orientation of the devices (in OpenXR's [frame-of-reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#fundamentals-coordinate-system)):
 ```py
 headset.position = (42.0, 1.6, 0.0)  # (x, y, z)
-right_controller.orientation = (1.0, 0.0, 0.0, 0.0)  # identity quaternion (w, x, y, z)
+right_controller.orientation = (0.0, 0.0, 0.0, 1.0)  # identity quaternion (x, y, z, w)
 ```
 
 5. Set button states:
@@ -76,7 +76,7 @@ def test_foo():
 
     right_controller = sim.device("/user/hand/right")
     right_controller.position = Vector((42, 42, 42))
-    right_controller.orientation = Quaternion((0, 1, 0), radians(30))  # rotate the controller
+    right_controller.orientation = blender_to_openxr_quat(Quaternion((0, 1, 0), radians(30)))  # rotate the controller 30 deg
 
     right_controller.set_input("/input/trigger/value", 0.85)  # press the trigger 85%
 
