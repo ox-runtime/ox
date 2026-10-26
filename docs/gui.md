@@ -112,7 +112,9 @@ Each device (HMD, controllers, trackers) has its own panel in the sidebar. Scrol
 
 Boolean (button) inputs are shown as toggle switches. Float inputs are shown as sliders.
 
-Trigger and squeeze-style float inputs also include a small filled-circle hold button next to the slider. Pressing and holding it ramps the value to `1.0` over `300 ms`, keeps it pinned at `1.0` while held, and releases it back to `0.0` over `100 ms` when released. Thumbstick and trackpad axes continue to use standard sliders only.
+Trigger and squeeze-style float inputs also include a small filled-circle hold button next to the slider. Pressing and holding it ramps the value to `1.0` over `150 ms`, keeps it pinned at `1.0` while held, and releases it back to `0.0` over `100 ms` when released. Thumbstick and trackpad axes continue to use standard sliders only.
+
+The controller face buttons (**A**/**B**, and **X**/**Y** on the other controller) get the same small filled-circle push button next to their toggle. It is a momentary control: the button value is set to `1` instantly while held and back to `0` instantly when released, with no ramp.
 
 ## Status Bar
 
