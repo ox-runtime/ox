@@ -1,5 +1,8 @@
 # Documentation
 
+## Knowledge base
+- [Knowledge base](../kb/README.md) - Long-form explanations of the architecture, internals, and development process.
+
 ## Overview
 - [FAQ](faq.md)
 
