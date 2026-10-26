@@ -1,0 +1,159 @@
+# EVENT LOG - ox project (covers the ox project and its companion repos in this workspace)
+# This file lives in the ox repo, but it is the project-wide event bus for the repos listed below.
+# Format:   [YYYY-MM-DD] [SEV-n] [CATEGORY] One-line description. <optional link>
+# Sev:      SEV-1 project-impacting / major ... SEV-5 minor, team-only. See event_log.md.
+# Sources:  Git history of the repos listed below. No CHANGES.md files exist yet; if one is
+#           added, it becomes a source too. Ordered oldest first.
+# Repos:    https://github.com/ox-runtime/ox  |  https://github.com/ox-runtime/ox-runtime
+#           https://github.com/ox-runtime/ox-ipc-proxy  |  https://github.com/ox-runtime/ox-sim-driver
+#           https://github.com/ox-runtime/ox-driver-example  |  https://github.com/ox-runtime/vog
+#           https://github.com/ox-runtime/ox-runtime.github.io  |  https://github.com/cmdr2/blender-xr-regression-tests
+
+[2026-01-09] [SEV-1] [RELEASE]   ox: project starts - a lightweight cross-platform OpenXR runtime for automated testing. https://github.com/ox-runtime/ox
+[2026-01-09] [SEV-2] [FEATURE]   ox: a minimal runtime returns the runtime name and version.
+[2026-01-09] [SEV-2] [FEATURE]   ox: per-frame headset pose tracking, with the orchestration needed to deliver it.
+[2026-01-09] [SEV-4] [PERF]      ox: debug logging no longer costs a performance penalty.
+[2026-01-10] [SEV-2] [ENGINE]    ox: split into a client/service design, with the service running as a separate process.
+[2026-01-10] [SEV-2] [FEATURE]   ox: driver API introduced; drivers are loaded dynamically from a sibling drivers folder.
+[2026-01-10] [SEV-4] [INTERNAL]  ox: the OpenXR-SDK is fetched during the build instead of being a submodule.
+[2026-01-10] [SEV-2] [RELEASE]   ox-driver-example: example driver project created as a template for writing custom drivers. https://github.com/ox-runtime/ox-driver-example
+[2026-01-13] [SEV-2] [FEATURE]   ox: controller actions and interaction profiles supported.
+[2026-01-13] [SEV-3] [FEATURE]   ox: button states supported.
+[2026-01-13] [SEV-3] [BUGFIX]    ox: an OpenGL texture is created so applications no longer crash.
+[2026-01-13] [SEV-3] [BUGFIX]    ox: missing runtime functions needed by Blender implemented.
+[2026-01-13] [SEV-3] [FEATURE]   ox-driver-example: controller pose, interaction profile and button states supported.
+[2026-01-14] [SEV-3] [BUGFIX]    ox: static C runtime used with MSVC on Windows, fixing Blender crashes in release builds.
+[2026-01-15] [SEV-3] [BUGFIX]    ox: binding profile matched correctly before returning action data.
+[2026-01-15] [SEV-4] [BUGFIX]    ox-driver-example: example button values fixed.
+[2026-01-15] [SEV-2] [RELEASE]   ox-sim-driver: first working version of the API-based virtual device simulator. https://github.com/ox-runtime/ox-sim-driver
+[2026-01-15] [SEV-4] [BUGFIX]    ox-sim-driver: float values for buttons fixed.
+[2026-01-20] [SEV-3] [FEATURE]   ox: works with any device type (including trackers) instead of two hardcoded controllers.
+[2026-01-20] [SEV-4] [INTERNAL]  ox: HMD and tracker pose paths unified.
+[2026-01-20] [SEV-3] [FEATURE]   ox-sim-driver: switchable device profiles remove Oculus-specific hardcoding.
+[2026-01-21] [SEV-3] [FEATURE]   ox: HTC Vive tracker support.
+[2026-01-21] [SEV-4] [INTERNAL]  ox-sim-driver: API scheme changed to put the path in the URL; /states renamed to /inputs.
+[2026-01-22] [SEV-4] [INTERNAL]  ox: input-state driver API flattened to per-data-type calls.
+[2026-01-22] [SEV-5] [INTERNAL]  ox: OxVector2f used in the driver API; duplicate code removed.
+[2026-01-24] [SEV-3] [FEATURE]   ox: xrLocateSpaces implemented.
+[2026-01-24] [SEV-4] [INTERNAL]  ox: OpenXR's XrPosef used instead of a custom pose struct.
+[2026-01-24] [SEV-4] [INTERNAL]  ox: automated test scaffolding added, with a mockable service connection.
+[2026-01-24] [SEV-4] [DOCS]      ox: compliance test summary generated from the OpenXR spec for two sections.
+[2026-01-24] [SEV-2] [RELEASE]   ox v0.2.0.
+[2026-01-24] [SEV-4] [FEATURE]   ox-sim-driver: float input states can be read as bool and vice versa.
+[2026-01-28] [SEV-3] [BUGFIX]    ox: correct session state transitions on xrRequestExitSession, fixing Blender hanging when VR starts a second time.
+[2026-01-28] [SEV-4] [INTERNAL]  ox: Blender restart test added.
+[2026-01-28] [SEV-1] [RELEASE]   ox v0.3.0: first public version, with the simulator GUI and REST API. Supports OpenGL on Windows, Linux and macOS.
+[2026-01-28] [SEV-4] [FEATURE]   ox-sim-driver: example script for DIY controllers added.
+[2026-01-29] [SEV-4] [INTERNAL]  ox: Blender draw-handler and timer tests added.
+[2026-01-30] [SEV-2] [FEATURE]   ox: Vulkan support (versions 1.0 to 1.3).
+[2026-01-30] [SEV-2] [FEATURE]   ox: initial Metal support for macOS.
+[2026-01-30] [SEV-4] [INTERNAL]  ox: graphics APIs gated behind build flags so Intel Macs can build with OpenGL instead of Metal.
+[2026-01-30] [SEV-3] [CI]        ox: Windows and Linux CI build added.
+[2026-01-30] [SEV-2] [RELEASE]   ox v0.4.0 (Vulkan and early Metal support).
+[2026-01-30] [SEV-3] [RELEASE]   ox v0.4.1.
+[2026-01-30] [SEV-4] [CI]        ox-sim-driver: CI workflow added.
+[2026-01-30] [SEV-3] [RELEASE]   ox-sim-driver v0.2.0.
+[2026-01-31] [SEV-3] [CI]        ox: macOS builds and test runs added to CI.
+[2026-01-31] [SEV-3] [RELEASE]   ox v0.4.2.
+[2026-01-31] [SEV-3] [FEATURE]   ox-sim-driver: unified API + GUI simulator skeleton and first control panel.
+[2026-01-31] [SEV-3] [CI]        ox-driver-example: release CI added; output renamed to ox_driver.dll / .so / .dylib.
+[2026-02-01] [SEV-4] [BUGFIX]    ox-sim-driver: window startup errors on macOS fixed (must run from the main thread).
+[2026-02-09] [SEV-2] [FEATURE]   ox: texture pixel data sent to drivers.
+[2026-02-09] [SEV-3] [FEATURE]   ox-sim-driver: eye textures shown in the GUI.
+[2026-02-10] [SEV-4] [INTERNAL]  ox: graphics APIs refactored into separate .hpp files.
+[2026-02-11] [SEV-3] [UI]        ox-sim-driver: GUI facelift with a native look on Windows and system dark/light mode.
+[2026-02-18] [SEV-3] [BUGFIX]    ox: fixed conflicts when multiple bindings across actions map to the same binding entry.
+[2026-02-18] [SEV-3] [RELEASE]   ox v0.4.3.
+[2026-02-19] [SEV-3] [BUGFIX]    ox: the runtime uses the headset pose sent by the driver.
+[2026-02-19] [SEV-3] [RELEASE]   ox v0.4.4.
+[2026-02-21] [SEV-3] [UI]        ox-sim-driver: layout redesigned; eye-texture alpha and vertical flip fixed.
+[2026-02-22] [SEV-4] [UI]        ox-sim-driver: toggle button component added.
+[2026-02-23] [SEV-4] [UI]        ox-sim-driver: Font Awesome icons supported.
+[2026-02-23] [SEV-3] [FEATURE]   ox-sim-driver: cross-platform way to set ox as the active OpenXR runtime.
+[2026-02-24] [SEV-2] [RELEASE]   vog: initial release of the GLFW + Dear ImGui windowing library used by the simulator GUI. https://github.com/ox-runtime/vog
+[2026-02-24] [SEV-4] [INTERNAL]  ox-sim-driver: windowing code extracted into the new vog library.
+[2026-02-24] [SEV-3] [RELEASE]   vog v1.0.0.
+[2026-02-24] [SEV-3] [BUGFIX]    vog: font size maintained when the window moves between displays of different DPI.
+[2026-02-25] [SEV-4] [BUGFIX]    vog: window layout redrawn while resizing.
+[2026-02-25] [SEV-4] [UI]        vog: custom button component and sleeker toggle button.
+[2026-02-25] [SEV-4] [BUGFIX]    ox-sim-driver: gimbal locking with rotation inputs fixed; sidebar made expandable.
+[2026-02-26] [SEV-3] [FEATURE]   vog: theme system added.
+[2026-02-26] [SEV-3] [RELEASE]   vog v1.1.0.
+[2026-02-26] [SEV-3] [FEATURE]   ox: session lifecycle events sent to the driver; a texture is sent just once per XR frame.
+[2026-02-26] [SEV-3] [FEATURE]   ox-sim-driver: session state events received and FPS calculated.
+[2026-02-27] [SEV-3] [BUGFIX]    ox: only sRGB formats reported so applications apply sRGB color management.
+[2026-02-27] [SEV-3] [FEATURE]   ox-sim-driver: HTTP APIs for session status and eye textures; the API server can be started and stopped from the GUI.
+[2026-02-27] [SEV-3] [BUGFIX]    ox-sim-driver: rotation axes interfering with each other fixed; transparency issues in the texture API fixed.
+[2026-02-27] [SEV-4] [BUGFIX]    vog: font scale on retina displays fixed.
+[2026-02-27] [SEV-3] [FEATURE]   vog: optional Wayland support on Linux.
+[2026-02-28] [SEV-4] [INTERNAL]  ox-sim-driver: /v1/frames renamed to /v1/views to match OpenXR wording.
+[2026-03-10] [SEV-1] [RELEASE]   ox v0.5.0: Metal support and live preview in the simulator GUI.
+[2026-03-10] [SEV-3] [RELEASE]   ox-sim-driver v0.3.0.
+[2026-03-12] [SEV-4] [INTERNAL]  ox-runtime and ox-ipc-proxy repositories created ahead of the code split.
+[2026-03-17] [SEV-1] [ENGINE]    Major refactor: ox split into the separate ox-runtime, ox-ipc-proxy and ox-sim-driver repositories.
+[2026-03-18] [SEV-3] [BUGFIX]    ox-ipc-proxy: no longer hangs when shutting down the IPC server on Windows.
+[2026-03-18] [SEV-4] [INTERNAL]  ox-runtime: driver functions called directly instead of through a legacy abstraction.
+[2026-03-19] [SEV-3] [INTERNAL]  ox-ipc-proxy: code simplified; integration tests added.
+[2026-03-19] [SEV-4] [INTERNAL]  ox-runtime: driver management simplified; driver setter renamed to ox_set_driver.
+[2026-03-24] [SEV-3] [FEATURE]   ox-sim-driver: REST API restored; clipboard previews; frame timestamp in the C API; mouse-drag/WASD frame preview controls.
+[2026-03-24] [SEV-3] [INTERNAL]  ox-runtime: OpenXR structs used instead of custom ones in the driver API.
+[2026-03-24] [SEV-4] [INTERNAL]  ox: ox_driver.h fetched automatically from a local or remote ox-runtime checkout.
+[2026-03-24] [SEV-3] [RELEASE]   ox-runtime v0.1.0.
+[2026-03-26] [SEV-3] [CI]        vog: release CI added.
+[2026-03-26] [SEV-4] [INTERNAL]  vog: CMake minimum relaxed to 3.15 with 3.25 policy handling.
+[2026-03-30] [SEV-3] [FEATURE]   ox-sim-driver: FPS-style mouse look and WASD/arrow navigation; glm used for math.
+[2026-03-30] [SEV-3] [RELEASE]   ox-runtime v0.2.0.
+[2026-03-30] [SEV-3] [RELEASE]   ox-ipc-proxy v0.2.0.
+[2026-03-30] [SEV-3] [RELEASE]   ox-sim-driver v0.5.0.
+[2026-03-30] [SEV-4] [INTERNAL]  ox: sub-repos pinned to specific versions; simulator docs added.
+[2026-03-30] [SEV-4] [INTERNAL]  ox-runtime, ox-ipc-proxy and ox-sim-driver switched from a custom bool to XrBool32.
+[2026-03-30] [SEV-5] [DOCS]      ox-runtime.github.io: project website repository created. https://github.com/ox-runtime/ox-runtime.github.io
+[2026-04-01] [SEV-3] [CI]        ox: easyinstaller used to produce release artifacts (zip, Windows installer, AppImage, flatpak, snap, dmg).
+[2026-04-01] [SEV-3] [BUGFIX]    ox: IPC backend creation order fixed to avoid hanging on the main thread.
+[2026-04-01] [SEV-4] [CI]        ox: IPC proxy tests run in CI.
+[2026-04-01] [SEV-3] [BUGFIX]    ox-runtime: macOS crash fixed by copying to a staging buffer first.
+[2026-04-01] [SEV-3] [BUGFIX]    ox-ipc-proxy: shared memory name fixed for Mac; stale shared memory fd cleaned up; frame order fixed.
+[2026-04-01] [SEV-3] [BUGFIX]    ox-sim-driver: macOS OpenXR registration path fixed.
+[2026-04-01] [SEV-3] [FEATURE]   ox-sim-driver: ox version shown in the titlebar; OpenXR runtime set on macOS after an escalated dialog.
+[2026-04-01] [SEV-4] [BUGFIX]    vog: build fixed for glfw 3.4 on Apple clang 17.
+[2026-04-01] [SEV-3] [RELEASE]   ox-runtime v0.2.1 and v0.2.2.
+[2026-04-01] [SEV-3] [RELEASE]   ox-ipc-proxy v0.2.1 through v0.2.5.
+[2026-04-01] [SEV-3] [RELEASE]   ox-sim-driver v0.5.1, v0.5.2 and v0.5.3.
+[2026-04-01] [SEV-3] [RELEASE]   vog v1.1.11.
+[2026-04-02] [SEV-4] [INTERNAL]  ox: IPC frontend/backend renamed to client/server.
+[2026-04-02] [SEV-4] [BUGFIX]    ox-runtime: potential memory leak on macOS fixed.
+[2026-04-02] [SEV-3] [BUGFIX]    ox-runtime: OpenGL frame flipped upside down.
+[2026-04-02] [SEV-4] [BUGFIX]    ox-sim-driver: GUI preview flicker fixed; controllers enabled by default.
+[2026-04-02] [SEV-3] [RELEASE]   ox-runtime v0.2.3 and v0.2.4.
+[2026-04-02] [SEV-3] [RELEASE]   ox-ipc-proxy v0.2.6 and v0.3.0.
+[2026-04-02] [SEV-3] [RELEASE]   ox-sim-driver v0.5.4.
+[2026-04-07] [SEV-3] [FEATURE]   ox: driver config read from config.yaml and applied to the loaded driver.
+[2026-04-07] [SEV-4] [INTERNAL]  ox: driver API renamed for consistency.
+[2026-04-07] [SEV-3] [RELEASE]   ox-runtime v0.3.0.
+[2026-04-07] [SEV-3] [RELEASE]   ox-ipc-proxy v0.4.0.
+[2026-04-07] [SEV-4] [FEATURE]   ox-driver-example: examples for set_config_ calls added.
+[2026-04-08] [SEV-3] [FEATURE]   ox-sim-driver: C API made more RESTful.
+[2026-04-08] [SEV-3] [RELEASE]   ox-sim-driver v0.6.0.
+[2026-04-09] [SEV-1] [RELEASE]   ox v0.6.0: XR testing fully inside the application process (no IPC), a redesigned GUI, and more release formats (dmg, Windows installer, AppImage, flatpak, snap).
+[2026-04-09] [SEV-4] [DOCS]      ox-runtime: README updated with project status and build output details.
+[2026-05-21] [SEV-3] [BUGFIX]    ox-runtime: the runtime no longer ignores button press and touch events.
+[2026-05-21] [SEV-3] [RELEASE]   ox-runtime v0.4.0.
+[2026-05-21] [SEV-3] [FEATURE]   ox-sim-driver: clickable button next to the trigger and squeeze sliders; device rotation made truly absolute; API server extra slash fixed.
+[2026-05-21] [SEV-3] [RELEASE]   ox-sim-driver v0.7.0.
+[2026-05-21] [SEV-2] [RELEASE]   ox v0.7.0: Python wrapper for easier in-process testing.
+[2026-06-11] [SEV-4] [BUGFIX]    ox-sim-driver: Python wrapper updated to match the current ox_driver.h.
+[2026-06-16] [SEV-3] [FEATURE]   ox-sim-driver: Python wrapper finds the active OpenXR runtime automatically and fails clearly if OX_USE_SIMULATOR is not set.
+[2026-06-16] [SEV-3] [FEATURE]   ox: Blender XR regression tests added (session setup, settings, headset tracking, controller poses).
+[2026-06-17] [SEV-4] [INTERNAL]  ox-sim-driver: Python wrapper restricted to known attributes.
+[2026-06-23] [SEV-3] [BUGFIX]    ox: loss of modal operator events (e.g. XR events) when printing status messages fixed.
+[2026-06-23] [SEV-2] [FEATURE]   blender-xr-regression-tests: the Blender XR test suite moved into its own repository, with action tests and test coverage. https://github.com/cmdr2/blender-xr-regression-tests
+[2026-06-24] [SEV-4] [INTERNAL]  ox-sim-driver: Python wrapper README added.
+[2026-06-24] [SEV-4] [DOCS]      ox: in-process testing docs added.
+[2026-06-30] [SEV-3] [FEATURE]   ox: regression test suite for Blender's XR API announced.
+[2026-06-30] [SEV-4] [DOCS]      ox: documentation improved; FAQ linked to drivers.md.
+[2026-06-30] [SEV-5] [DOCS]      ox-driver-example: README and pixel data example updated.
+[2026-07-02] [SEV-3] [BUGFIX]    ox: quaternion inconsistency fixed.
+[2026-07-02] [SEV-4] [DOCS]      ox: automated testing docs updated; C API docs moved next to ox_sim.h; design diagrams added.
+[2026-07-02] [SEV-4] [FEATURE]   blender-xr-regression-tests: support for filtering by files and test names.
+[2026-07-02] [SEV-4] [DOCS]      ox-sim-driver: C API docs improved and Python wrapper README updated; stale examples removed.
+[2026-10-26] [SEV-5] [INTERNAL]  Project-wide event log introduced: event_log.txt + event_log.md, to communicate notable changes with impact and category.
