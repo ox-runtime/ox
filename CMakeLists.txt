@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.27)
 
 if(APPLE)
-    project(ox VERSION 0.7.0 LANGUAGES C CXX OBJC OBJCXX)
+    project(ox VERSION 0.8.0 LANGUAGES C CXX OBJC OBJCXX)
 else()
-    project(ox VERSION 0.7.0 LANGUAGES C CXX)
+    project(ox VERSION 0.8.0 LANGUAGES C CXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -98,9 +98,9 @@ if(CMAKE_DL_LIBS)
     target_link_libraries(whereami PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
-ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "v0.4.0" "${OX_RUNTIME_REPO}")
-ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "v0.4.0" "${OX_IPC_PROXY_REPO}")
-ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "v0.7.0" "${OX_SIM_DRIVER_REPO}")
+ox_add_component(ox_runtime_repo https://github.com/ox-runtime/ox-runtime.git "v0.5.0" "${OX_RUNTIME_REPO}")
+ox_add_component(ox_ipc_proxy_repo https://github.com/ox-runtime/ox-ipc-proxy.git "v0.5.0" "${OX_IPC_PROXY_REPO}")
+ox_add_component(ox_sim_driver_repo https://github.com/ox-runtime/ox-sim-driver.git "v0.8.0" "${OX_SIM_DRIVER_REPO}")
 
 function(ox_apply_version_defines target_name)
     if(TARGET ${target_name})
